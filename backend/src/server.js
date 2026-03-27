@@ -1,7 +1,14 @@
-const app = require('./app');
+const app = require("./app");
+const { clearTempFolder } = require("./utils/githubZipHandler");
 
-const PORT = process.env.PORT || 5000;
+const PORT = 5000;
 
-app.listen(PORT, () => {
-  console.log(`✅ Shinkei backend running on http://localhost:${PORT}`);
-});
+async function start() {
+    await clearTempFolder(); // 🔥 THIS is what you wanted
+
+    app.listen(PORT, () => {
+        console.log(`🚀 Server running on port ${PORT}`);
+    });
+}
+
+start();

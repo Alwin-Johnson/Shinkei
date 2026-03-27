@@ -1,0 +1,70 @@
+# Make sure you're in the right directory
+cd "C:\Users\Alwin Johnson\Desktop\Java\Hostel-Management\frontend"
+
+# Create .gitignore file with content
+@"
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+build/
+.next/
+.vite/
+out/
+
+# Generated files
+*.js.map
+**/*chunk-*.js
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Cache directories
+.npm
+.eslintcache
+.cache/
+.parcel-cache
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Temporary folders
+tmp/
+temp/
+"@ | Set-Content .gitignore
+
+Write-Host ".gitignore created successfully!" -ForegroundColor Green
