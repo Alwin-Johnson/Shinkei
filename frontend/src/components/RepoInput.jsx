@@ -10,12 +10,26 @@ export default function RepoInput({ onAnalyze, loading }) {
   const [url, setUrl]       = useState('');
   const [fnText, setFnText] = useState('');
   const [error, setError]   = useState('');
+  const [started, setStarted] = useState(false);
 
   const submit = (urlVal, fnVal, key) => {
     if (!urlVal.trim()) { setError('Please enter a GitHub repository URL.'); return; }
     if (!fnVal.trim())  { setError('Please enter a function or action to analyse.'); return; }
     setError('');
     onAnalyze(urlVal, fnVal, key);
+  };
+
+  const handleAnalyzeClick = () => {
+    if (!started) {
+      if (!url.trim()) { 
+        setError('Please enter a GitHub repository URL.'); 
+        return; 
+      }
+      setError('');
+      setStarted(true);
+    } else {
+      submit(url, fnText);
+    }
   };
 
   return (
@@ -30,46 +44,39 @@ export default function RepoInput({ onAnalyze, loading }) {
           placeholder="https://github.com/username/repository"
           value={url}
           onChange={e => { setUrl(e.target.value); setError(''); }}
-          onKeyDown={e => e.key === 'Enter' && submit(url, fnText)}
+          onKeyDown={e => e.key === 'Enter' && handleAnalyzeClick()}
+          readOnly={started}
         />
       </div>
 
-      {/* Function / action */}
-      <label className="field-label" style={{ marginTop: 14 }}>
-        Function / Action to Analyse
-      </label>
-      <div className="fn-textarea-wrap">
-        <textarea
-          className="fn-textarea"
-          placeholder={`e.g. handleSubmit\nor paste the full function body…\n\nfunction handleSubmit(e) {\n  e.preventDefault();\n  loginUser(email, password);\n}`}
-          value={fnText}
-          rows={5}
-          onChange={e => { setFnText(e.target.value); setError(''); }}
-        />
-      </div>
+      {started && (
+        <>
+          {/* Function / action */}
+          <label className="field-label" style={{ marginTop: 14 }}>
+            Function / Action to Analyse
+          </label>
+          <div className="input-row">
+            <input
+              type="text"
+              className="repo-input"
+              placeholder="e.g. handleSubmit"
+              value={fnText}
+              onChange={e => { setFnText(e.target.value); setError(''); }}
+            />
+          </div>
+        </>
+      )}
 
       {error && <p className="input-error">{error}</p>}
 
       <button
         className={`analyze-btn full-width ${loading ? 'loading' : ''}`}
-        onClick={() => submit(url, fnText)}
+        onClick={handleAnalyzeClick}
         disabled={loading}
         style={{ marginTop: 12 }}
       >
-        {loading ? 'Parsing…' : 'Analyze Flow →'}
+        {loading ? 'Parsing…' : (started ? 'Analyze Flow →' : 'Next')}
       </button>
-
-      <div className="demo-row">
-        {DEMOS.map(d => (
-          <button
-            key={d.key}
-            className="demo-btn"
-            onClick={() => { setUrl(d.url); setFnText(d.fn); submit(d.url, d.fn, d.key); }}
-          >
-            Try: {d.label}
-          </button>
-        ))}
-      </div>
 
       {loading && (
         <div className="parse-status">
