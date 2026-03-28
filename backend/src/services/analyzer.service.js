@@ -1,6 +1,6 @@
-const path           = require("path");
-const { fileWalker:getAllFiles } = require("../utils/fileWalker");
-const { runParser }  = require("../parser/engine/parserEngine");
+const path = require("path");
+const { fileWalker: getAllFiles } = require("../utils/fileWalker");
+const { runParser } = require("../parser/engine/parserEngine");
 
 /**
  * analyzer.service.js
@@ -20,14 +20,12 @@ const SKIP_NAMES = new Set([
     // Array/String/Promise Methods
     "map", "filter", "reduce", "push", "pop", "slice", "splice", "split", "replace", "trim", "then", "catch", "finally",
     // Data Accessors / Property-like calls
-    "name", "line", "file", "type", "path", "handler", "length", "size", "has", "get", "set", "add", "delete", "clear",
-  
+    "name", "line", "file", "type", "path", "handler", "length", "size", "has", "get", "set", "add", "delete", "clear"
 ]);
 
 // ── 2. STRICT WHITELIST (Allowed 3rd-Party Boundaries) ───────────────────────
 const ALLOWED_EXTERNALS = new Set([
-    "axios", "fetch", "mongoose", "prisma" 
-    // Add more high-level DB/API clients here as needed
+    "axios", "fetch", "mongoose", "prisma"
 ]);
 
 class GlobalIndex {
@@ -36,6 +34,9 @@ class GlobalIndex {
         this.routes     = new Map(); 
         this.files      = new Map(); 
         this.reverseMap = new Map();
+        
+        // 👉 FIX: The analyzer will now remember the repo path
+        this.repoPath   = null; 
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -43,6 +44,9 @@ class GlobalIndex {
     // ═══════════════════════════════════════════════════════════════════════
 
     build(repoPath) {
+        // 👉 FIX: Save the path into memory
+        this.repoPath = repoPath; 
+
         this.functions.clear();
         this.routes.clear();
         this.files.clear();
@@ -190,24 +194,17 @@ class GlobalIndex {
         return "backend";
     }
 
-    /**
-     * THE GATEKEEPER: "Unknown = Reject"
-     */
     _isRelevantCall(callName, objectName) {
         if (!callName) return false;
 
-        // 1. HARD REJECT: Native objects, built-in methods, and property accessors
         if (SKIP_NAMES.has(callName)) return false;
         if (objectName && SKIP_OBJECTS.has(objectName)) return false;
 
-        // 2. ALLOW: It is a user-defined function in the repository
         if (this.functions.has(callName)) return true;
 
-        // 3. ALLOW: It is a recognized, high-value 3rd-party library
         if (objectName && ALLOWED_EXTERNALS.has(objectName)) return true;
-        if (ALLOWED_EXTERNALS.has(callName)) return true; // e.g., direct fetch()
+        if (ALLOWED_EXTERNALS.has(callName)) return true; 
 
-        // 4. IGNORE EVERYTHING ELSE
         return false;
     }
 
@@ -246,11 +243,8 @@ class GlobalIndex {
 
             const fnInfo = this.findFunction(funcName, callerFile);
             
-            // If function is entirely unknown and not in our index, drop it
             if (!fnInfo) return; 
-            
-            // Prevent analyzer from analyzing itself if pointed at its own repo
-           
+
             const visitKey = `${fnInfo.file}:${funcName}`;
             if (callStack.has(visitKey)) return;
 
@@ -273,7 +267,6 @@ class GlobalIndex {
             const fileData = this.getFileData(fnInfo.file);
             if (fileData) {
 
-                // API calls → bridge to backend
                 const apiCalls = (fileData.apiCalls || []).filter(a => a.from === funcName);
                 for (const api of apiCalls) {
                     const apiLabel = `${api.method} ${api.url ?? "unknown"}`;
@@ -287,11 +280,8 @@ class GlobalIndex {
                     }
                 }
 
-                // Function calls
                 const allCalls = this.getCalls(funcName, fileData);
                 for (const call of allCalls) {
-                    
-                    // GATEKEEPER: "Unknown = Reject"
                     if (!this._isRelevantCall(call.name, call.object)) continue;
 
                     if (call.object) {
@@ -299,7 +289,6 @@ class GlobalIndex {
                         if (resolved) {
                             dfs(call.name, fnInfo.file, nodeId, new Set(callStack), depth + 1);
                         } else {
-                            // Valid 3rd-party library call (survived relevance check whitelist)
                             const label = `${call.object}.${call.name}()`;
                             const extId = upsertNode(`ext:${label}`, label, fnInfo.file, call.line, null, "external");
                             addEdge(nodeId, extId);
@@ -311,7 +300,6 @@ class GlobalIndex {
                     if (this.functions.has(call.name)) {
                         dfs(call.name, fnInfo.file, nodeId, new Set(callStack), depth + 1);
                     } else {
-                        // Global whitelist function (like fetch)
                         const label = `${call.name}()`;
                         const extId = upsertNode(`ext:${label}`, label, fnInfo.file, call.line, null, "external");
                         addEdge(nodeId, extId);
@@ -319,7 +307,6 @@ class GlobalIndex {
                     }
                 }
 
-                // Events that trigger this function
                 for (const evt of (fileData.events || [])) {
                     const triggers = evt.handler === funcName || (evt.callsInside || []).includes(funcName);
                     if (!triggers) continue;
@@ -330,7 +317,6 @@ class GlobalIndex {
                     pushFlow({ label, file: fnInfo.file, startLine: evt.line, endLine: null, type: "event" });
                 }
 
-                // Routes that map to this function
                 for (const [routePath, routeData] of this.routes) {
                     if (routeData.handler !== funcName) continue;
                     const rLabel = `${routeData.method} ${routePath}`;
@@ -413,7 +399,6 @@ class GlobalIndex {
 
             for (const { callerName, callerFile } of callers) {
                 
-                // BACKWARD GATEKEEPER: "Unknown = Reject" applies in reverse too
                 if (!this._isRelevantCall(callerName, null)) continue;
                 if (callerFile.includes("analyzer.service.js")) continue;
 
@@ -509,6 +494,22 @@ class GlobalIndex {
     // ═══════════════════════════════════════════════════════════════════════
     // 6. PUBLIC API
     // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * getFunctionDefinition(name)
+     * * Returns the file path and line numbers where a function is defined.
+     * Used by the code controller to fetch raw source code.
+     */
+    getFunctionDefinition(name) {
+        const fnInfo = this.findFunction(name);
+        if (!fnInfo) return null;
+
+        return {
+            file: fnInfo.file,
+            startLine: fnInfo.startLine,
+            endLine: fnInfo.endLine
+        };
+    }
 
     analyzeFunction(name, direction = "forward", maxDepth = null) {
         const fnInfo = this.findFunction(name);
