@@ -54,17 +54,46 @@ function App() {
   const [flow, setFlow]       = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // fnText is available for future real AST integration
-  const handleAnalyze = (url, fnText, forcedKey) => {
+  // 1. Make the function async
+ const handleAnalyze = async (url, fnText) => {
     setFlow(null);
     setLoading(true);
-    const key = forcedKey || resolveFlowKey(url, fnText);
-    setTimeout(() => {
-      setFlow(MOCK_FLOWS[key] || MOCK_FLOWS.login);
-      setLoading(false);
-    }, 900);
-  };
 
+    try {
+        // STEP 1: Upload and get the local repoPath
+        const uploadRes = await fetch('http://localhost:5000/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ repoUrl: url }), // Matches your uploadRepo controller
+        });
+        const uploadData = await uploadRes.json();
+
+        if (!uploadData.success) throw new Error(uploadData.error);
+
+        // STEP 2: Use the returned repoPath to Analyze
+        const analyzeRes = await fetch('http://localhost:5000/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                repoPath: uploadData.repoPath, // The "Secret Sauce"
+                entryFunction: fnText 
+            }),
+        });
+        const analyzeData = await analyzeRes.json();
+
+        if (analyzeData.success) {
+            setFlow(analyzeData.flow);
+        } else {
+            throw new Error(analyzeData.error);
+        }
+
+    } catch (error) {
+        console.error("Pipeline Error:", error);
+        alert(`Error: ${error.message}`);
+    } finally {
+        setLoading(false);
+    }
+};
   return (
     <div className="app-shell">
       <div className="orb orb-purple" />

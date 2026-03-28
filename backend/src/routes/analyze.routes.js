@@ -1,5 +1,6 @@
-const express = require("express");
-const router = express.Router();
+// src/routes/analyze.routes.js
+const express        = require("express");
+const router         = express.Router();
 const { analyzeRepo } = require("../controllers/analyze.controller");
 
 router.post("/", analyzeRepo);

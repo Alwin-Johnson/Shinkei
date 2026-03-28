@@ -37,21 +37,27 @@ function resolveUrl(node) {
 }
 
 // ─── get current enclosing function name ──────────────────────────────────────
+// Replace your existing getCurrentFunction with this one
 function getCurrentFunction(path) {
     let current = path.parentPath;
     while (current) {
         const node = current.node;
         if (node.type === "FunctionDeclaration" && node.id?.name) return node.id.name;
-        if (
-            (node.type === "FunctionExpression" || node.type === "ArrowFunctionExpression") &&
-            current.parent?.type === "VariableDeclarator"
-        ) return current.parent.id?.name ?? "anonymous";
+        
+        if (node.type === "FunctionExpression" || node.type === "ArrowFunctionExpression") {
+            const parent = current.parent;
+            if (parent?.type === "VariableDeclarator") return parent.id?.name ?? "anonymous";
+            if (parent?.type === "AssignmentExpression") {
+                const left = parent.left;
+                return left.property?.name ?? (left.type === "Identifier" ? left.name : "anonymous");
+            }
+            if (parent?.type === "ObjectProperty") return parent.key?.name ?? "anonymous";
+        }
         if (node.type === "ClassMethod" && node.key?.name) return node.key.name;
         current = current.parentPath;
     }
     return "module";
 }
-
 // ─── extract method from fetch options ────────────────────────────────────────
 function fetchMethod(args) {
     const options = args[1];
