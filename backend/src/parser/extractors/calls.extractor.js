@@ -5,16 +5,6 @@ const traverse = require("@babel/traverse").default;
  *
  * Detects ALL function calls in a JS/JSX/TS/TSX file.
  * Tracks WHO is calling WHOM — critical for flow building.
- *
- * Upgraded to perfectly support:
- * - direct calls                   → loginUser()
- * - member calls                   → auth.loginUser()
- * - optional chaining calls        → api?.loginUser()
- * - constructor calls              → new AuthService()
- * - callbacks in arguments         → setTimeout(loginUser)
- * - HOF callbacks                  → arr.map(processUser)
- * - callbacks in object args       → { onSuccess: handleLogin }
- * - caller tracking                → from: currentFunction
  */
 
 // ─── helper: get current enclosing function name from path ───────────────────
@@ -23,24 +13,42 @@ function getCurrentFunction(path) {
     while (current) {
         const node = current.node;
 
+        // 1. Standard Declaration: function myFunc() {}
         if (node.type === "FunctionDeclaration" && node.id?.name) {
             return node.id.name;
         }
-        if (
-            (node.type === "FunctionExpression" || node.type === "ArrowFunctionExpression") &&
-            current.parent?.type === "VariableDeclarator"
-        ) {
-            return current.parent.id?.name ?? "anonymous";
+
+        // 2. Arrow/Anonymous Functions attached to variables, exports, or objects
+        if (node.type === "FunctionExpression" || node.type === "ArrowFunctionExpression") {
+            const parent = current.parent;
+
+            if (parent) {
+                // Case A: const myFunc = () => {}
+                if (parent.type === "VariableDeclarator" && parent.id?.name) {
+                    return parent.id.name;
+                }
+
+                // Case B: exports.myFunc = () => {} OR module.exports.myFunc = () => {}
+                if (parent.type === "AssignmentExpression") {
+                    const left = parent.left;
+                    if (left.type === "MemberExpression" && left.property?.name) {
+                        return left.property.name; // returns "myFunc"
+                    }
+                    if (left.type === "Identifier" && left.name) {
+                        return left.name;
+                    }
+                }
+
+                // Case C: { myFunc: () => {} }
+                if (parent.type === "ObjectProperty" && parent.key?.name) {
+                    return parent.key.name;
+                }
+            }
         }
+
+        // 3. Class Methods: class MyClass { myFunc() {} }
         if (node.type === "ClassMethod" && node.key?.name) {
             return node.key.name;
-        }
-        if (
-            node.type === "ObjectProperty" &&
-            (node.value?.type === "FunctionExpression" ||
-                node.value?.type === "ArrowFunctionExpression")
-        ) {
-            return node.key?.name ?? "anonymous";
         }
 
         current = current.parentPath;
