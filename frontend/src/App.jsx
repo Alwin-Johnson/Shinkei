@@ -134,14 +134,17 @@ function resolveFlowKey(url, fnText) {
 function App() {
   const [flow, setFlow]       = useState(null);
   const [loading, setLoading] = useState(false);
+  const [analyzed, setAnalyzed] = useState(false);
 
   const handleAnalyze = (url, fnText, forcedKey) => {
     setFlow(null);
     setLoading(true);
+    setAnalyzed(false);
     const key = forcedKey || resolveFlowKey(url, fnText);
     setTimeout(() => {
       setFlow(MOCK_FLOWS[key] || MOCK_FLOWS.login);
       setLoading(false);
+      setAnalyzed(true);
     }, 900);
   };
 
@@ -166,7 +169,7 @@ function App() {
         </header>
 
         <main className="app-main">
-          <RepoInput onAnalyze={handleAnalyze} loading={loading} />
+          <RepoInput onAnalyze={handleAnalyze} loading={loading} analyzed={analyzed} />
           {flow && !loading && <StatsBar flow={flow.nodes} />}
         </main>
       </div>

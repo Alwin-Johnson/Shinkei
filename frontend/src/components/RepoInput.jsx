@@ -6,7 +6,7 @@ const DEMOS = [
   { label: 'Search',      url: 'https://github.com/example/search', key: 'search',   fn: 'handleSearch'   },
 ];
 
-export default function RepoInput({ onAnalyze, loading }) {
+export default function RepoInput({ onAnalyze, loading, analyzed }) {
   const [url, setUrl]       = useState('');
   const [fnText, setFnText] = useState('');
   const [error, setError]   = useState('');
@@ -45,7 +45,6 @@ export default function RepoInput({ onAnalyze, loading }) {
           value={url}
           onChange={e => { setUrl(e.target.value); setError(''); }}
           onKeyDown={e => e.key === 'Enter' && handleAnalyzeClick()}
-          readOnly={started}
         />
       </div>
 
@@ -62,6 +61,7 @@ export default function RepoInput({ onAnalyze, loading }) {
               placeholder="e.g. handleSubmit"
               value={fnText}
               onChange={e => { setFnText(e.target.value); setError(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleAnalyzeClick()}
             />
           </div>
         </>
