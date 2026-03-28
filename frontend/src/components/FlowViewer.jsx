@@ -3,7 +3,7 @@ import FlowStep from './FlowStep';
 import FlowGraph from './FlowGraph';
 import Legend from './Legend';
 
-export default function FlowViewer({ flowData, loading }) {
+export default function FlowViewer({ flowData, graphData, loading, onTabChange }) {
   const [visible, setVisible]     = useState(false);
   const [activeTab, setActiveTab] = useState('flow');
 
@@ -14,6 +14,11 @@ export default function FlowViewer({ flowData, loading }) {
       return () => clearTimeout(t);
     }
   }, [flowData]);
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
 
   if (loading) return null;
 
@@ -33,7 +38,7 @@ export default function FlowViewer({ flowData, loading }) {
           <button
             key={tab}
             className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => handleTabChange(tab)}
           >
             {tab}
           </button>
@@ -58,7 +63,7 @@ export default function FlowViewer({ flowData, loading }) {
       )}
 
       {activeTab === 'graph' && (
-        <FlowGraph flowData={flowData} visible={visible} />
+        <FlowGraph flowData={graphData} visible={visible} />
       )}
     </div>
   );
