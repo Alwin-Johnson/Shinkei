@@ -1,97 +1,57 @@
-const path = require("path");
-const { fileWalker } = require("./src/services/fileWalker.services");
-const { runParser }  = require("./src/parser/engine/parserEngine");
+// scripts/test-parser.js
+const { index } = require('./src/services/indexBuilderNew'); // Ensure path is correct
+const path = require('path');
+const queryEngine = require('./src/services/queryEngine');
+async function test() {
+    const targetRepo = path.resolve(__dirname, '../');
+    console.log(`📂 Testing Repo: ${targetRepo}`);
+    console.log("--- Starting Analysis ---");
 
-const ICONS = {
-    file:     "FILE",
-    function: "FN",
-    call:     "CALL",
-    api:      "API",
-    route:    "ROUTE",
-    event:    "EVENT",
-};
+    await index.build(targetRepo);
+    console.log("Total Events in Index:", index.events.size);
+// Manually check if the key exists
+const eventKeys = Array.from(index.events.keys());
+console.log("Available Event IDs:", eventKeys.slice(0, 5));
+    // 1. Show Global Stats Table
+    console.log("\n📊 Global Stats:");
+    console.table({
+        "Total Files": index.files.size,
+        "Total Functions": index.functionsById.size,
+        "Total Routes": index.routes.size,
+        "Total API Calls": index.apiCalls.length,
+        "Total Events": index.events.size
+    });
 
-function printTree(node, indent = "") {
-    const icon = ICONS[node.type] ?? node.type;
-
-    let label = "";
-
-    if (node.type === "file") {
-        label = node.file;
-    } else if (node.type === "function") {
-        label = `${node.name}  [${node.fnType}${node.isAsync ? " async" : ""}]  line ${node.line}`;
-    } else if (node.type === "call") {
-        label = `${node.callee}  line ${node.line}`;
-    } else if (node.type === "api") {
-        label = `${node.lib}.${node.method}  ${node.url ?? ""}  line ${node.line}`;
-    } else if (node.type === "route") {
-        label = `${node.method} ${node.path}  handler:${node.handler ?? "?"}  line ${node.line}`;
-    } else if (node.type === "event") {
-        label = `${node.event} on <${node.element}>  handler:${node.handler ?? "?"}  line ${node.line}`;
+    // 2. Sample API Calls
+    if (index.apiCalls.length > 0) {
+        console.log("\n📡 Sample API Calls (First 3):");
+        index.apiCalls.slice(0, 3).forEach(api => {
+            console.log(`   [${api.method}] ${api.url} in ${api.file}`);
+        });
     }
 
-    console.log(`${indent}[${icon}] ${label}`);
-
-    if (node.children?.length) {
-        for (const child of node.children) {
-            printTree(child, indent + "  │  ");
-        }
+    // 3. Sample Events
+    if (index.events.size > 0) {
+        console.log("\n🖱️  Sample Events (First 3):");
+        Array.from(index.events.values()).slice(0, 3).forEach(ev => {
+            console.log(`   ${ev.event} on <${ev.element}> -> handler: ${ev.handler || 'unknown'} (${ev.file})`);
+        });
     }
+
+    // 4. Function Lookup Test
+    const funcArray = Array.from(index.functionsById.values());
+    if (funcArray.length > 3) {
+        const sample = funcArray[3];
+        console.log("\n🔍 Function Lookup Test:");
+        console.log(`   ID: ${sample.id}`);
+        console.log(`   Data:`, index.functionsById.get(sample.id));
+    }
+    const result = queryEngine.analyzeFunction("onAnalyze:WorkspaceModal");
+console.log("FLOW DETECTED:", JSON.stringify(result.flow, null, 2));
+console.log("STATS:", result.stats);
 }
 
-function runOnRepo(repoPath) {
-    const files  = fileWalker(repoPath);
-    let passed = 0;
-    let failed = 0;
-
-    const summary = {
-        files: 0, functions: 0, calls: 0,
-        apis: 0, routes: 0, events: 0,
-    };
-
-    console.log("\n========================================");
-    console.log(` SHINKEI — ${repoPath}`);
-    console.log(`  ${files.length} files found`);
-    console.log("========================================\n");
-
-    for (const filePath of files) {
-        const result = runParser(filePath);
-
-        if (!result) {
-            console.log(`[FAILED] ${filePath}\n`);
-            failed++;
-            continue;
-        }
-
-        passed++;
-        summary.files++;
-        countSummary(result, summary);
-        printTree(result);
-        console.log();
-    }
-
-    console.log("========================================");
-    console.log(" SUMMARY");
-    console.log("========================================");
-    console.log(`  Files      : ${passed} ok / ${failed} failed`);
-    console.log(`  Functions  : ${summary.functions}`);
-    console.log(`  Calls      : ${summary.calls}`);
-    console.log(`  APIs       : ${summary.apis}`);
-    console.log(`  Routes     : ${summary.routes}`);
-    console.log(`  Events     : ${summary.events}`);
-    console.log("========================================\n");
-}
-
-function countSummary(node, summary) {
-    if (node.type === "function") summary.functions++;
-    else if (node.type === "call")  summary.calls++;
-    else if (node.type === "api")   summary.apis++;
-    else if (node.type === "route") summary.routes++;
-    else if (node.type === "event") summary.events++;
-
-    if (node.children) {
-        for (const child of node.children) countSummary(child, summary);
-    }
-}
-
-module.exports = { runOnRepo };
+test().catch(err => {
+    console.error("\n💥 Test Failed:");
+    console.error(err);
+});

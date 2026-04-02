@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { analyzeRepo } = require("../controllers/analyze.controller");
+const { analyzeRepo } = require("../controllers/analyze1.controller");
 //const { getFunctionCode } = require("../controllers/code.controller");
 
 router.post("/", analyzeRepo);

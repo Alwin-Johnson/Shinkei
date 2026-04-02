@@ -175,7 +175,7 @@ function knowsFunction(name) {
  * @param   {string}      url
  * @param   {string|null} [method=null] - HTTP method hint (improves precision)
  * @returns {{ id, handler, file, method, path }|null}
- */
+**/
 function findRoute(url, method = null) {
     if (!url || url.startsWith("dynamic:")) return null;
 
