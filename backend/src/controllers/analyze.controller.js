@@ -1,7 +1,4 @@
 const { fetchRepoAsZip } = require("../utils/githubZipHandler");
-
-// ── NEW ARCHITECTURE IMPORTS ──────────────────────────────────────
-// Replacing the deprecated analyzer.service.js monolith
 const { index } = require("../services/indexBuilder"); 
 const { analyzeFunction } = require("../services/queryEngine");
 
@@ -21,13 +18,15 @@ exports.analyzeRepo = async (req, res) => {
             ? Number(depth)
             : null;
 
-        const repoPath = await fetchRepoAsZip(repoUrl);
+        // 🟢 UPDATE 1: Pass 'true' to trigger OpenTelemetry injection
+        console.log(`🔍 Starting analysis for: ${repoUrl}`);
+        const repoPath = await fetchRepoAsZip(repoUrl, true); 
         
-        // 1. BUILD STEP: Delegate to indexBuilder
-        // TODO (Future): Implement caching to avoid rebuilding per request
-         await index.build(repoPath);
+        // 1. BUILD STEP
+        await index.build(repoPath);
 
-        // 2. ANALYZE STEP: Delegate to queryEngine
+        // 2. ANALYZE STEP 
+        // This now returns { flow, fullGraph, stats, telemetry, meta }
         const result = analyzeFunction(
             entryFunction,
             directionSafe,
@@ -54,19 +53,21 @@ exports.analyzeRepo = async (req, res) => {
             };
 
             return {
-                root: 0,
-                nodes: nodes.map(n => ({
-                    ...n,
-                    originalId: n.id,   // preserve string ID; numeric id is for graph rendering only
-                    id: getNumericId(n.id),
-                })),
-                edges: edges.map(e => ({
-                    from: getNumericId(e.from),
-                    to:   getNumericId(e.to),
-                })),
-            };
-        };
-
+        root: "0", // Keeping root consistent with numeric strings
+        nodes: nodes.map(n => ({
+            ...n,
+            originalId: n.id,
+            // Create the searchable ID for Telemetry pulses
+            nodeId: n.nodeId,
+            // The numeric ID used for the layout engine positions
+            id: getNumericId(n.id), 
+        })),
+        edges: edges.map(e => ({
+            from: getNumericId(e.from),
+            to:   getNumericId(e.to),
+        })),
+    };
+};
         const numericFlow = formatToNumericFlow(result.fullGraph.nodes, result.fullGraph.edges);
 
         // ── FINAL RESPONSE ────────────────────────────────────────────────
@@ -74,7 +75,9 @@ exports.analyzeRepo = async (req, res) => {
             success: true, 
             flow: numericFlow, 
             trace: result.flow, 
-            stats: result.stats 
+            stats: result.stats,
+            telemetry: result.telemetry, // 🟢 UPDATE 2: Expose OTel data to Frontend
+            meta: result.meta            // 🟢 UPDATE 3: Expose meta (entryType, etc.)
         });
 
     } catch (err) {

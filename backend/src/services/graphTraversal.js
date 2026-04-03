@@ -101,6 +101,7 @@ function traceForward(entryFnInfo, maxDepth = 8) {
             file:      fnInfo.file,
             startLine: fnInfo.startLine,
             endLine:   fnInfo.endLine,
+            nodeId:    `${fnInfo.file}:${fnInfo.startLine}`,
             type:      nodeType,
             layer:     layer,
         });
