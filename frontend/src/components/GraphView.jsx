@@ -1,20 +1,122 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Hexagon, Activity, GitBranch } from 'lucide-react';
+import { ArrowLeft, Hexagon, Activity, GitBranch, Layers, Zap } from 'lucide-react';
 import FlowViewer from './FlowViewer';
 import StatsBar from './StatsBar';
+
+// ── Premium loading animation — neural network pulse ──
+function NeuralLoader() {
+  const nodes = [
+    { x: 50, y: 20, delay: 0 },
+    { x: 25, y: 45, delay: 0.2 },
+    { x: 75, y: 45, delay: 0.3 },
+    { x: 12, y: 70, delay: 0.5 },
+    { x: 40, y: 70, delay: 0.6 },
+    { x: 60, y: 70, delay: 0.7 },
+    { x: 88, y: 70, delay: 0.4 },
+  ];
+
+  const edges = [
+    [0, 1], [0, 2], [1, 3], [1, 4], [2, 5], [2, 6],
+  ];
+
+  return (
+    <div style={{
+      position: 'relative',
+      width: '120px',
+      height: '100px',
+      margin: '0 auto',
+    }}>
+      <svg width="120" height="100" viewBox="0 0 120 100" style={{ overflow: 'visible' }}>
+        {/* Edges */}
+        {edges.map(([a, b], i) => {
+          const from = nodes[a];
+          const to = nodes[b];
+          return (
+            <g key={`edge-${i}`}>
+              <line
+                x1={from.x * 1.2} y1={from.y}
+                x2={to.x * 1.2} y2={to.y}
+                stroke="rgba(139,92,246,0.15)"
+                strokeWidth="1"
+              />
+              {/* Animated pulse along edge */}
+              <circle r="2" fill="#a78bfa" opacity="0.6">
+                <animateMotion
+                  dur={`${1.5 + i * 0.3}s`}
+                  repeatCount="indefinite"
+                  path={`M${from.x * 1.2},${from.y} L${to.x * 1.2},${to.y}`}
+                />
+                <animate attributeName="opacity" values="0;0.8;0" dur="1.5s" repeatCount="indefinite" />
+              </circle>
+            </g>
+          );
+        })}
+
+        {/* Nodes */}
+        {nodes.map((node, i) => (
+          <g key={`node-${i}`}>
+            <circle
+              cx={node.x * 1.2} cy={node.y} r="5"
+              fill="rgba(139,92,246,0.15)"
+              stroke="rgba(139,92,246,0.3)"
+              strokeWidth="1"
+            >
+              <animate
+                attributeName="r"
+                values="4;6;4"
+                dur="2s"
+                begin={`${node.delay}s`}
+                repeatCount="indefinite"
+              />
+              <animate
+                attributeName="fill"
+                values="rgba(139,92,246,0.15);rgba(139,92,246,0.3);rgba(139,92,246,0.15)"
+                dur="2s"
+                begin={`${node.delay}s`}
+                repeatCount="indefinite"
+              />
+            </circle>
+            {/* Glow */}
+            <circle
+              cx={node.x * 1.2} cy={node.y} r="8"
+              fill="none"
+              stroke="rgba(139,92,246,0.1)"
+              strokeWidth="1"
+            >
+              <animate
+                attributeName="r"
+                values="6;12;6"
+                dur="2s"
+                begin={`${node.delay}s`}
+                repeatCount="indefinite"
+              />
+              <animate
+                attributeName="opacity"
+                values="0.5;0;0.5"
+                dur="2s"
+                begin={`${node.delay}s`}
+                repeatCount="indefinite"
+              />
+            </circle>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
 
 // Background matching HeroView / WorkspaceModal aesthetic
 function FloatingOrbs() {
   return (
     <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
-      {/* Directional sweep — mimics GodRays from top-right */}
+      {/* Directional sweep */}
       <div style={{
         position: 'absolute', inset: 0,
         background: 'linear-gradient(135deg, rgba(91,33,182,0.12) 0%, rgba(79,70,229,0.06) 25%, transparent 55%)',
       }} />
 
-      {/* Primary glow — top-right (matches GodRays offsetX/Y) */}
+      {/* Primary glow */}
       <div style={{
         position: 'absolute', width: '800px', height: '600px',
         right: '-100px', top: '-200px',
@@ -23,7 +125,7 @@ function FloatingOrbs() {
         animation: 'gv-breathe 8s ease-in-out infinite',
       }} />
 
-      {/* Secondary glow — center-left */}
+      {/* Secondary glow */}
       <div style={{
         position: 'absolute', width: '600px', height: '600px',
         left: '-150px', top: '30%',
@@ -32,7 +134,7 @@ function FloatingOrbs() {
         animation: 'gv-breathe 10s ease-in-out infinite 3s',
       }} />
 
-      {/* Bloom accent — bottom */}
+      {/* Bloom accent */}
       <div style={{
         position: 'absolute', width: '700px', height: '400px',
         left: '50%', bottom: '-100px',
@@ -42,14 +144,14 @@ function FloatingOrbs() {
         animation: 'gv-breathe 12s ease-in-out infinite 5s',
       }} />
 
-      {/* Radial vignette — identical to HeroView */}
+      {/* Radial vignette */}
       <div style={{
         position: 'absolute', inset: 0,
         background: 'radial-gradient(ellipse 80% 60% at 50% 50%, transparent 30%, #07070a 100%)',
         zIndex: 1,
       }} />
 
-      {/* Noise grain — matching HeroView opacity */}
+      {/* Noise grain */}
       <div style={{
         position: 'absolute', inset: 0,
         opacity: 0.032,
@@ -63,15 +165,15 @@ function FloatingOrbs() {
   );
 }
 
-export default function GraphView({ 
-  isOpen, 
-  flow, 
-  trace, 
-  loading, 
-  onBackToWorkspace, 
-  onAnalyzeAgain, 
-  initialDirection = 'forward', 
-  maxSteps = 10, 
+export default function GraphView({
+  isOpen,
+  flow,
+  trace,
+  loading,
+  onBackToWorkspace,
+  onAnalyzeAgain,
+  initialDirection = 'forward',
+  maxSteps = 10,
   isRealtime = false,
   isAutoOpening = false,
   isAppReady = false,
@@ -87,12 +189,10 @@ export default function GraphView({
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
+
         if (data.type === 'pulse_batch') {
-          // 1. DILATION: How much we "stretch" real time (e.g., 50ms real -> 1s visual)
-          const DILATION_FACTOR = 20; 
-          // 2. STAGGER: The minimum time gap between pulses (1000ms = 1 second)
-          const MIN_GAP_MS = 300;
+          const DILATION_FACTOR = 1;
+          const MIN_GAP_MS = 100;
 
           data.spans.forEach((pulse, index) => {
             const visualDelay = (pulse.offsetMs * DILATION_FACTOR) + (index * MIN_GAP_MS);
@@ -128,7 +228,7 @@ export default function GraphView({
     if (!target) return;
 
     target.classList.remove('live-pulse');
-    void target.offsetWidth; // Force Reflow
+    void target.offsetWidth;
     target.classList.add('live-pulse');
   };
 
@@ -137,7 +237,7 @@ export default function GraphView({
     if (!el) return;
 
     el.classList.remove('route-active');
-    void el.offsetWidth; 
+    void el.offsetWidth;
 
     el.classList.add('route-active');
     setTimeout(() => el.classList.remove('route-active'), 1000);
@@ -156,7 +256,7 @@ export default function GraphView({
         >
           <FloatingOrbs />
 
-          {/* ── Top navigation bar ── */}
+          {/* ── Top navigation bar (glassmorphism) ── */}
           <motion.div
             initial={{ y: -24, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -165,31 +265,42 @@ export default function GraphView({
               position: 'sticky',
               top: 0,
               zIndex: 20,
-              background: 'rgba(7,7,10,0.7)',
-              backdropFilter: 'blur(24px) saturate(1.2)',
-              WebkitBackdropFilter: 'blur(24px) saturate(1.2)',
-              borderBottom: '1px solid rgba(139,92,246,0.08)',
+              background: 'rgba(7,7,10,0.6)',
+              backdropFilter: 'blur(24px) saturate(1.4)',
+              WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
+              borderBottom: '1px solid rgba(139,92,246,0.06)',
             }}
           >
+            {/* Top accent line */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: '10%',
+              right: '10%',
+              height: '1px',
+              background: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.2), transparent)',
+            }} />
+
             <div style={{
               maxWidth: '1400px',
               margin: '0 auto',
-              padding: '12px 28px',
-              display: 'flex',
+              padding: '14px 28px',
+              display: 'grid',
+              gridTemplateColumns: '1fr auto 1fr',
               alignItems: 'center',
-              justifyContent: 'space-between',
+              gap: '16px',
             }}>
-              {/* Left: Actions */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {/* Left: Back */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
                 <button
                   onClick={onBackToWorkspace}
                   style={{
-                    background: 'rgba(139,92,246,0.06)',
-                    border: '1px solid rgba(139,92,246,0.12)',
-                    borderRadius: '10px',
+                    background: 'rgba(139,92,246,0.05)',
+                    border: '1px solid rgba(139,92,246,0.1)',
+                    borderRadius: '100px',
                     color: '#a78bfa',
-                    fontSize: '13px',
-                    padding: '7px 14px',
+                    fontSize: '12px',
+                    padding: '7px 16px 7px 12px',
                     cursor: 'pointer',
                     fontFamily: "'Inter', sans-serif",
                     fontWeight: 500,
@@ -197,62 +308,24 @@ export default function GraphView({
                     transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '7px',
+                    gap: '6px',
                   }}
                   onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = 'rgba(139,92,246,0.35)';
-                    e.currentTarget.style.background = 'rgba(139,92,246,0.12)';
+                    e.currentTarget.style.borderColor = 'rgba(139,92,246,0.25)';
+                    e.currentTarget.style.background = 'rgba(139,92,246,0.1)';
                     e.currentTarget.style.color = '#c4b5fd';
                     e.currentTarget.style.transform = 'translateX(-2px)';
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = 'rgba(139,92,246,0.12)';
-                    e.currentTarget.style.background = 'rgba(139,92,246,0.06)';
+                    e.currentTarget.style.borderColor = 'rgba(139,92,246,0.1)';
+                    e.currentTarget.style.background = 'rgba(139,92,246,0.05)';
                     e.currentTarget.style.color = '#a78bfa';
                     e.currentTarget.style.transform = 'translateX(0)';
                   }}
                 >
-                  <ArrowLeft style={{ width: 14, height: 14 }} />
+                  <ArrowLeft style={{ width: 13, height: 13 }} />
                   Back
                 </button>
-
-                {/* Right: Analyze Again (Real-time only) */}
-                {isRealtime && onAnalyzeAgain && (
-                  <button
-                    onClick={onAnalyzeAgain}
-                    style={{
-                      background: 'rgba(16,185,129,0.06)',
-                      border: '1px solid rgba(16,185,129,0.12)',
-                      borderRadius: '10px',
-                      color: '#10b981',
-                      fontSize: '12px',
-                      padding: '7px 14px',
-                      cursor: 'pointer',
-                      fontFamily: "'Inter', sans-serif",
-                      fontWeight: 500,
-                      letterSpacing: '0.01em',
-                      transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '7px',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = 'rgba(16,185,129,0.35)';
-                      e.currentTarget.style.background = 'rgba(16,185,129,0.12)';
-                      e.currentTarget.style.color = '#34d399';
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.borderColor = 'rgba(16,185,129,0.12)';
-                      e.currentTarget.style.background = 'rgba(16,185,129,0.06)';
-                      e.currentTarget.style.color = '#10b981';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    <Activity style={{ width: 13, height: 13 }} />
-                    Analyze Next Click
-                  </button>
-                )}
               </div>
 
               {/* Center: Brand */}
@@ -260,9 +333,7 @@ export default function GraphView({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '9px',
-                position: 'absolute',
-                left: '50%',
-                transform: 'translateX(-50%)'
+                justifyContent: 'center',
               }}>
                 <div style={{
                   position: 'relative',
@@ -270,10 +341,19 @@ export default function GraphView({
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
+                  {/* Subtle glow ring */}
+                  <div style={{
+                    position: 'absolute',
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(124,58,237,0.15), transparent)',
+                    filter: 'blur(4px)',
+                  }} />
                   <Hexagon style={{
                     width: 18, height: 18,
                     color: '#7c3aed',
-                    opacity: 0.5,
+                    opacity: 0.6,
                     animation: 'gv-hex-spin 20s linear infinite',
                   }} />
                 </div>
@@ -282,7 +362,7 @@ export default function GraphView({
                   fontWeight: 800,
                   fontSize: '13px',
                   letterSpacing: '0.12em',
-                  background: 'linear-gradient(135deg, rgba(196,181,253,0.7), rgba(167,139,250,0.5))',
+                  background: 'linear-gradient(135deg, rgba(196,181,253,0.8), rgba(167,139,250,0.6))',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
@@ -291,29 +371,92 @@ export default function GraphView({
                 </span>
               </div>
 
-              {/* Right: Status indicator */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontSize: '11px',
-                fontFamily: "'JetBrains Mono', monospace",
-                color: '#64748b',
-                letterSpacing: '0.03em',
-              }}>
-                <Activity style={{
-                  width: 12, height: 12,
-                  color: flow ? '#22c993' : '#64748b',
-                  opacity: 0.8,
-                }} />
-                <span style={{ color: flow ? '#94a3b8' : '#475569' }}>
-                  {flow ? `${flow.nodes?.length || 0} nodes` : 'idle'}
-                </span>
+              {/* Right: Status + Capture button */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}>
+                {/* Capture Next (Real-time only) */}
+                {isRealtime && onAnalyzeAgain && (
+                  <button
+                    onClick={onAnalyzeAgain}
+                    style={{
+                      background: 'rgba(34,201,147,0.06)',
+                      border: '1px solid rgba(34,201,147,0.12)',
+                      borderRadius: '100px',
+                      color: '#22c993',
+                      fontSize: '12px',
+                      padding: '7px 16px 7px 12px',
+                      cursor: 'pointer',
+                      fontFamily: "'Inter', sans-serif",
+                      fontWeight: 500,
+                      letterSpacing: '0.01em',
+                      transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      position: 'relative',
+                      overflow: 'hidden',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = 'rgba(34,201,147,0.3)';
+                      e.currentTarget.style.background = 'rgba(34,201,147,0.1)';
+                      e.currentTarget.style.color = '#34d399';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(34,201,147,0.12)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = 'rgba(34,201,147,0.12)';
+                      e.currentTarget.style.background = 'rgba(34,201,147,0.06)';
+                      e.currentTarget.style.color = '#22c993';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <Activity style={{ width: 12, height: 12 }} />
+                    Capture Next
+                  </button>
+                )}
+
+                {/* Status pill */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '11px',
+                  fontFamily: "'JetBrains Mono', monospace",
+                  color: '#64748b',
+                  letterSpacing: '0.03em',
+                  padding: '5px 12px',
+                  borderRadius: '100px',
+                  background: flow ? 'rgba(34,201,147,0.05)' : 'rgba(255,255,255,0.02)',
+                  border: flow ? '1px solid rgba(34,201,147,0.08)' : '1px solid rgba(255,255,255,0.04)',
+                  transition: 'all 0.3s ease',
+                }}>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    {flow && (
+                      <div style={{
+                        position: 'absolute',
+                        width: 16,
+                        height: 16,
+                        borderRadius: '50%',
+                        background: 'rgba(34,201,147,0.15)',
+                        animation: 'sk-pulse 2s ease-in-out infinite',
+                      }} />
+                    )}
+                    <Activity style={{
+                      width: 12, height: 12,
+                      color: flow ? '#22c993' : '#64748b',
+                      opacity: 0.8,
+                      position: 'relative',
+                    }} />
+                  </div>
+                  <span style={{ color: flow ? '#94a3b8' : '#475569' }}>
+                    {flow ? `${flow.nodes?.length || 0} nodes` : 'idle'}
+                  </span>
+                </div>
               </div>
             </div>
           </motion.div>
 
-          {/* ── Flow label ── */}
+          {/* ── Flow label + breadcrumb ── */}
           {flow && !loading && (
             <motion.div
               initial={{ y: 12, opacity: 0 }}
@@ -333,7 +476,18 @@ export default function GraphView({
                 gap: '12px',
                 marginBottom: '20px',
               }}>
-                <GitBranch style={{ width: 16, height: 16, color: '#7c3aed', opacity: 0.7 }} />
+                <div style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 10,
+                  background: 'rgba(124,58,237,0.08)',
+                  border: '1px solid rgba(124,58,237,0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <GitBranch style={{ width: 16, height: 16, color: '#7c3aed', opacity: 0.8 }} />
+                </div>
                 <div>
                   <h2 style={{
                     margin: 0,
@@ -344,19 +498,33 @@ export default function GraphView({
                     letterSpacing: '-0.02em',
                     lineHeight: 1.2,
                   }}>
-                    Call Graph
+                    Execution Graph
                   </h2>
-                  <p style={{
-                    margin: '3px 0 0',
+                  <div style={{
+                    margin: '4px 0 0',
                     fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: '12px',
+                    fontSize: '11px',
                     color: '#64748b',
                     letterSpacing: '0.02em',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
                   }}>
-                    {flow.nodes?.length || 0} nodes · {flow.edges?.length || 0} connections
-                  </p>
+                    <Layers style={{ width: 11, height: 11, opacity: 0.6 }} />
+                    {flow.nodes?.length || 0} nodes
+                    <span style={{ color: '#334155' }}>·</span>
+                    <Zap style={{ width: 11, height: 11, opacity: 0.6 }} />
+                    {flow.edges?.length || 0} connections
+                  </div>
                 </div>
               </div>
+
+              {/* Section divider */}
+              <div style={{
+                height: '1px',
+                background: 'linear-gradient(90deg, rgba(139,92,246,0.15), transparent)',
+                marginBottom: '4px',
+              }} />
             </motion.div>
           )}
 
@@ -404,7 +572,7 @@ export default function GraphView({
             </motion.div>
           )}
 
-          {/* Loading state or Ready-to-Arm state */}
+          {/* Loading / Ready-to-Arm state */}
           {(loading || (isRealtime && !flow)) && (
             <motion.div
               initial={{ opacity: 0, scale: 0.96 }}
@@ -412,7 +580,7 @@ export default function GraphView({
               transition={{ duration: 0.4 }}
               style={{
                 textAlign: 'center',
-                padding: flow ? '40px 24px' : '15vh 24px',
+                padding: flow ? '40px 24px' : '12vh 24px',
                 position: 'relative',
                 zIndex: 2,
               }}
@@ -421,83 +589,74 @@ export default function GraphView({
                 display: 'inline-flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: '20px',
+                gap: '24px',
                 width: '100%',
               }}>
-                {/* Layered spinner (only if actually loading/waiting) */}
-                {(loading || isAutoOpening) && (
-                  <div style={{ position: 'relative', width: '56px', height: '56px' }}>
-                    <div style={{
-                      position: 'absolute', inset: 0,
-                      border: '2px solid rgba(139,92,246,0.08)',
-                      borderTopColor: 'rgba(139,92,246,0.4)',
-                      borderRadius: '50%',
-                      animation: 'spin 1.2s linear infinite',
-                    }} />
-                    <div style={{
-                      position: 'absolute', inset: '6px',
-                      border: '2px solid rgba(99,102,241,0.06)',
-                      borderBottomColor: 'rgba(99,102,241,0.3)',
-                      borderRadius: '50%',
-                      animation: 'spin 0.9s linear infinite reverse',
-                    }} />
-                    <div style={{
-                      position: 'absolute', inset: '14px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                      <Hexagon style={{
-                        width: 16, height: 16,
-                        color: '#7c3aed',
-                        opacity: 0.4,
-                        animation: 'gv-breathe 2s ease-in-out infinite',
-                      }} />
-                    </div>
-                  </div>
-                )}
+                {/* Neural network loader */}
+                {(loading || isAutoOpening) && <NeuralLoader />}
 
                 {/* Status Text */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                   <span style={{
                     fontFamily: "'Inter', sans-serif",
-                    fontSize: '14px',
+                    fontSize: '16px',
                     fontWeight: 600,
-                    color: '#cbd5e1',
+                    color: '#e2e8f0',
                     letterSpacing: '-0.01em',
                     textAlign: 'center',
                   }}>
-                    {isAutoOpening 
-                      ? 'Preparing Target Environment' 
+                    {isAutoOpening
+                      ? 'Spinning Up Environment'
                       : loading
-                        ? (isRealtime ? 'Waiting for Interaction' : 'Building call graph')
+                        ? (isRealtime ? 'Listening for Events' : 'Tracing Execution Paths')
                         : isAppReady
-                          ? 'Environment Ready'
-                          : 'Initializing...'}
+                          ? 'Ready to Capture'
+                          : 'Initializing…'}
                   </span>
                   <span style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: '12px',
-                    color: '#64748b',
-                    letterSpacing: '0.04em',
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: '13px',
+                    color: 'rgba(148,163,184,0.5)',
+                    letterSpacing: '0.01em',
                     textAlign: 'center',
-                    maxWidth: '400px',
-                    lineHeight: 1.5,
+                    maxWidth: '380px',
+                    lineHeight: 1.6,
+                    fontWeight: 400,
                   }}>
                     {isAutoOpening
-                      ? 'Target app will auto-open shortly. Please wait a moment.'
+                      ? 'Your target app will open automatically in a few seconds.'
                       : loading
-                        ? 'Click any button on the target application to begin tracing…' 
+                        ? 'Interact with the target app — we\'ll capture the execution flow.'
                         : isAppReady
-                          ? `Press 'Analyze Next Click' above to start capturing traces from ${appUrl || 'your application'}.`
-                          : 'Warming up infrastructure...'}
+                          ? `Hit "Capture Next" above, then click anything in ${appUrl || 'your app'}.`
+                          : 'Setting up the analysis engine…'}
                   </span>
+
+                  {/* Loading progress bar */}
+                  {(loading || isAutoOpening) && (
+                    <div style={{
+                      width: '200px',
+                      height: '2px',
+                      background: 'rgba(139,92,246,0.1)',
+                      borderRadius: '1px',
+                      overflow: 'hidden',
+                      marginTop: '8px',
+                    }}>
+                      <div style={{
+                        width: '40%',
+                        height: '100%',
+                        background: 'linear-gradient(90deg, #7c3aed, #6366f1)',
+                        borderRadius: '1px',
+                        animation: 'sk-shimmer 1.5s ease-in-out infinite',
+                      }} />
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>
           )}
 
-          {/* ── Styles (Including new Pulse Animations) ── */}
+          {/* ── Styles ── */}
           <style>{`
             @keyframes spin {
               to { transform: rotate(360deg); }
@@ -510,7 +669,7 @@ export default function GraphView({
               to { transform: rotate(360deg); }
             }
             
-            /* --- New Telemetry Pulse Animations --- */
+            /* --- Telemetry Pulse Animations --- */
             @keyframes pulse-glow {
               0% {
                 transform: scale(1);
@@ -527,42 +686,38 @@ export default function GraphView({
               }
             }
             
-/* --- Telemetry Pulse Animation (2-Second Flow) --- */
-  .live-pulse {
-    z-index: 100;
-  }
+            .live-pulse {
+              z-index: 100;
+            }
 
-  .live-pulse rect:first-of-type {
-    stroke: #00ff88 !important; 
-    stroke-width: 5px !important; /* Slightly thicker for visibility */
-    fill: rgba(0, 255, 136, 0.3) !important;
-    filter: drop-shadow(0 0 15px #00ff88) !important;
+            .live-pulse rect:first-of-type {
+              stroke: #00ff88 !important; 
+              stroke-width: 5px !important;
+              fill: rgba(0, 255, 136, 0.3) !important;
+              filter: drop-shadow(0 0 15px #00ff88) !important;
+              transform-box: fill-box;
+              transform-origin: center;
+              animation: shinkei-pulse-animation 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            }
 
-    transform-box: fill-box;
-    transform-origin: center;
-    
-    /* 🟢 2 Second Duration with a "smooth-in, slow-out" curve */
-    animation: shinkei-pulse-animation 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-
-  @keyframes shinkei-pulse-animation {
-    0% { 
-      transform: scale(1); 
-      opacity: 1; 
-    }
-    15% { 
-      transform: scale(1.15); /* Aggressive pop */
-      filter: drop-shadow(0 0 20px #00ff88);
-    }
-    40% {
-      transform: scale(1.05); /* Linger slightly larger */
-    }
-    100% { 
-      transform: scale(1); 
-      opacity: 0.8; 
-      filter: drop-shadow(0 0 0px #00ff88);
-    }
-  }
+            @keyframes shinkei-pulse-animation {
+              0% { 
+                transform: scale(1); 
+                opacity: 1; 
+              }
+              15% { 
+                transform: scale(1.15);
+                filter: drop-shadow(0 0 20px #00ff88);
+              }
+              40% {
+                transform: scale(1.05);
+              }
+              100% { 
+                transform: scale(1); 
+                opacity: 0.8; 
+                filter: drop-shadow(0 0 0px #00ff88);
+              }
+            }
           `}</style>
         </motion.div>
       )}

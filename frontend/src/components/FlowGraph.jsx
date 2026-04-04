@@ -35,7 +35,6 @@ function EdgePath({ from, to, label, pos, levels, visible, edgeIndex, backward =
 
   const destLevel = Math.max(levels[from] ?? 0, levels[to] ?? 0);
   const gradId = `edge-grad-${edgeIndex}`;
-  const flowId = `edge-flow-${edgeIndex}`;
 
   return (
     <g style={{
@@ -43,7 +42,7 @@ function EdgePath({ from, to, label, pos, levels, visible, edgeIndex, backward =
       transition: `opacity 0.7s ease ${destLevel * LEVEL_DELAY + 150}ms`,
     }}>
       {/* Soft glow layer */}
-      <path d={d} fill="none" stroke="rgba(99,102,241,0.08)" strokeWidth="8"
+      <path d={d} fill="none" stroke="rgba(99,102,241,0.06)" strokeWidth="10"
         filter="url(#edge-glow)" />
       {/* Main edge */}
       <path d={d} fill="none" stroke={`url(#${gradId})`} strokeWidth="1.5" opacity="0.7"
@@ -51,7 +50,7 @@ function EdgePath({ from, to, label, pos, levels, visible, edgeIndex, backward =
 
       {/* Animated flow dot */}
       {visible && (
-        <circle r="2.5" fill="#818cf8" opacity="0.6">
+        <circle r="2.5" fill="#818cf8" opacity="0.7">
           <animateMotion dur={`${2 + edgeIndex * 0.3}s`} repeatCount="indefinite" path={d} />
         </circle>
       )}
@@ -60,20 +59,20 @@ function EdgePath({ from, to, label, pos, levels, visible, edgeIndex, backward =
       {label && (
         <g>
           <rect
-            x={(sx + ex) / 2 - label.length * 3.2 - 8}
-            y={my - 16}
-            width={label.length * 6.4 + 16}
-            height={20}
-            rx={6}
-            fill="rgba(7,7,10,0.9)"
-            stroke="rgba(99,102,241,0.12)"
+            x={(sx + ex) / 2 - label.length * 3.2 - 10}
+            y={my - 17}
+            width={label.length * 6.4 + 20}
+            height={22}
+            rx={8}
+            fill="rgba(7,7,10,0.92)"
+            stroke="rgba(139,92,246,0.12)"
             strokeWidth="0.5"
           />
           <text
             x={(sx + ex) / 2}
             y={my - 3}
             textAnchor="middle" fontSize="10"
-            fontFamily="'JetBrains Mono', monospace" fill="#818cf8" letterSpacing="0.04em" fontWeight="500"
+            fontFamily="'JetBrains Mono', monospace" fill="#a78bfa" letterSpacing="0.04em" fontWeight="500"
           >
             {label}
           </text>
@@ -82,9 +81,9 @@ function EdgePath({ from, to, label, pos, levels, visible, edgeIndex, backward =
       {/* Gradient def */}
       <defs>
         <linearGradient id={gradId} x1={sx} y1={sy_start} x2={ex} y2={ey_start} gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#6366f1" stopOpacity="0.35" />
-          <stop offset="50%" stopColor="#818cf8" stopOpacity="0.7" />
-          <stop offset="100%" stopColor="#a78bfa" stopOpacity="0.35" />
+          <stop offset="0%" stopColor="#7c3aed" stopOpacity="0.3" />
+          <stop offset="50%" stopColor="#818cf8" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#a78bfa" stopOpacity="0.3" />
         </linearGradient>
       </defs>
     </g>
@@ -101,14 +100,14 @@ function NodeCard({ node, pos, isRoot, isActive, onClick, level, visible }) {
   const y = PAD + p.y;
   const t = TYPE[node.type] || TYPE.function;
   const shortLabel = node.label.length > 22 ? node.label.slice(0, 21) + '…' : node.label;
-  const shortFile  = node.file?.length > 24 ? '…' + node.file.slice(-23) : (node.file || '');
-  const lineNum    = node.startLine ?? node.line ?? null;
-  const delay      = level * LEVEL_DELAY;
+  const shortFile = node.file?.length > 24 ? '…' + node.file.slice(-23) : (node.file || '');
+  const lineNum = node.startLine ?? node.line ?? null;
+  const delay = level * LEVEL_DELAY;
   const isHighlighted = isRoot || isActive || hovered;
 
   return (
     <g
-        id={node.nodeId}
+      id={node.nodeId}
       style={{
         cursor: 'pointer',
         opacity: visible ? 1 : 0,
@@ -121,8 +120,8 @@ function NodeCard({ node, pos, isRoot, isActive, onClick, level, visible }) {
     >
       {/* Outer glow for highlighted */}
       {isHighlighted && (
-        <rect x={x - 5} y={y - 5} width={NW + 10} height={NH + 10} rx={15}
-          fill="none" stroke={t.accent} strokeWidth="1" opacity={0.2}
+        <rect x={x - 5} y={y - 5} width={NW + 10} height={NH + 10} rx={16}
+          fill="none" stroke={t.accent} strokeWidth="1" opacity={0.15}
           filter="url(#node-glow)" />
       )}
 
@@ -130,19 +129,32 @@ function NodeCard({ node, pos, isRoot, isActive, onClick, level, visible }) {
       {isRoot && (
         <>
           <rect x={x - 8} y={y - 8} width={NW + 16} height={NH + 16} rx={18}
-            fill="none" stroke={t.accent} strokeWidth="0.5" opacity={0.15}
-            strokeDasharray="6 4" />
+            fill="none" stroke={t.accent} strokeWidth="0.5" opacity={0.12}
+            strokeDasharray="6 4">
+            <animate attributeName="stroke-dashoffset" values="0;20" dur="4s" repeatCount="indefinite" />
+          </rect>
           <rect x={x - 3} y={y - 3} width={NW + 6} height={NH + 6} rx={14}
-            fill={t.glow} opacity={0.08} />
+            fill={t.glow} opacity={0.06} />
         </>
       )}
 
-      {/* Card background */}
+      {/* Card background — glass effect */}
       <rect x={x} y={y} width={NW} height={NH} rx={12}
-        fill={isHighlighted ? t.bg.replace('0.08', '0.14') : t.bg}
+        fill={isHighlighted ? t.bg.replace('0.08', '0.16') : t.bg}
         stroke={isHighlighted ? t.accent : t.border}
         strokeWidth={isHighlighted ? 1.2 : 0.5}
-        style={{ transition: 'all 0.25s ease' }}
+        style={{ transition: 'all 0.3s cubic-bezier(0.22,1,0.36,1)' }}
+      />
+
+      {/* Glass overlay gradient */}
+      <defs>
+        <linearGradient id={`glass-${node.id}`} x1={x} y1={y} x2={x} y2={y + NH} gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="white" stopOpacity="0.03" />
+          <stop offset="100%" stopColor="white" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <rect x={x} y={y} width={NW} height={NH} rx={12}
+        fill={`url(#glass-${node.id})`}
       />
 
       {/* Top edge glow line */}
@@ -179,12 +191,17 @@ function NodeCard({ node, pos, isRoot, isActive, onClick, level, visible }) {
         {shortFile}{lineNum != null ? ` :${lineNum}` : ''}
       </text>
 
-
-      {/* Active click indicator */}
+      {/* Active click indicator with pulse ring */}
       {isActive && (
-        <circle cx={x + NW - 12} cy={y + 12} r="3" fill={t.accent} opacity={0.7}>
-          <animate attributeName="opacity" values="0.7;0.3;0.7" dur="1.5s" repeatCount="indefinite" />
-        </circle>
+        <>
+          <circle cx={x + NW - 12} cy={y + 12} r="3" fill={t.accent} opacity={0.7}>
+            <animate attributeName="opacity" values="0.7;0.3;0.7" dur="1.5s" repeatCount="indefinite" />
+          </circle>
+          <circle cx={x + NW - 12} cy={y + 12} r="6" fill="none" stroke={t.accent} strokeWidth="0.5" opacity={0.3}>
+            <animate attributeName="r" values="5;9;5" dur="2s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.3;0;0.3" dur="2s" repeatCount="indefinite" />
+          </circle>
+        </>
       )}
     </g>
   );
@@ -192,7 +209,7 @@ function NodeCard({ node, pos, isRoot, isActive, onClick, level, visible }) {
 
 // ── Main ───────────────────────────────────────────────────────────────────
 export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 10 }) {
-  const [activeId,  setActiveId]  = useState(null);
+  const [activeId, setActiveId] = useState(null);
   const [animReady, setAnimReady] = useState(false);
   const scrollRef = useRef(null);
 
@@ -218,7 +235,7 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
     : buildForwardLayout(nodes, edges, rootId, maxSteps);
 
   const activeNode = filteredNodes.find(n => n.id === activeId);
-  const hasActive  = !!activeNode;
+  const hasActive = !!activeNode;
 
   useEffect(() => {
     if (!scrollRef.current || hasActive) return;
@@ -269,12 +286,26 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
         .fg-hint {
           text-align: center;
           font-size: 12px;
-          color: rgba(100,116,139,0.7);
+          color: rgba(100,116,139,0.5);
           font-family: 'Inter', sans-serif;
           padding: 6px 0 8px;
           letter-spacing: 0.03em;
           flex-shrink: 0;
           margin: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+        }
+        .fg-hint::before,
+        .fg-hint::after {
+          content: '';
+          width: 32px;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(139,92,246,0.1));
+        }
+        .fg-hint::after {
+          background: linear-gradient(90deg, rgba(139,92,246,0.1), transparent);
         }
 
         .fg-scroll {
@@ -319,7 +350,7 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
           border: 1px solid transparent;
           border-radius: 16px;
           background: rgba(15,10,30,0.97);
-          box-shadow: 0 18px 48px rgba(2,6,23,0.28);
+          box-shadow: 0 18px 48px rgba(2,6,23,0.28), 0 0 0 1px rgba(139,92,246,0.05);
         }
         .fg-code-panel::-webkit-scrollbar {
           display: none;
@@ -331,7 +362,8 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
           transform: translateX(0);
           opacity: 1;
           pointer-events: all;
-          border-color: rgba(139,92,246,0.08);
+          border-color: rgba(139,92,246,0.1);
+          overflow: hidden;
         }
 
         .fg-empty {
@@ -403,28 +435,28 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
                   overflow: 'visible',
                 }}
               >
-              <defs>
-                {/* Arrow marker */}
-                <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5"
-                  markerWidth="6" markerHeight="6" orient="auto">
-                  <path d="M1 1L9 5L1 9" fill="none" stroke="#818cf8"
-                    strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
-                </marker>
+                <defs>
+                  {/* Arrow marker */}
+                  <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M1 1L9 5L1 9" fill="none" stroke="#818cf8"
+                      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+                  </marker>
 
-                {/* Glow filters */}
-                <filter id="edge-glow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur stdDeviation="4" result="blur" />
-                </filter>
-                <filter id="node-glow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur stdDeviation="6" result="blur" />
-                </filter>
-              </defs>
+                  {/* Glow filters */}
+                  <filter id="edge-glow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="5" result="blur" />
+                  </filter>
+                  <filter id="node-glow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="8" result="blur" />
+                  </filter>
+                </defs>
 
-              {filteredEdges.map((e, i) => (
-                <EdgePath key={i} from={e.from} to={e.to} label={e.label}
-                  pos={pos} levels={levels} visible={animReady}
-                  edgeIndex={i} backward={backward} />
-              ))}
+                {filteredEdges.map((e, i) => (
+                  <EdgePath key={i} from={e.from} to={e.to} label={e.label}
+                    pos={pos} levels={levels} visible={animReady}
+                    edgeIndex={i} backward={backward} />
+                ))}
 
                 {filteredNodes.map(nd => (
                   <NodeCard
