@@ -6,13 +6,14 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
   const [direction, setDirection] = useState('forward');
   const [steps, setSteps] = useState('10');
   const [error, setError] = useState('');
+  const [isRealtime, setIsRealtime] = useState(false);
 
   const handleSubmit = () => {
     if (!url.trim()) { setError('Please enter a GitHub repository URL.'); return; }
-    if (!fnText.trim()) { setError('Please enter a function or action to analyse.'); return; }
+    if (!isRealtime && !fnText.trim()) { setError('Please enter a function or action to analyse.'); return; }
     setError('');
     const stepsNum = Math.max(1, Math.min(100, Number(steps) || 10));
-    onAnalyze(url, fnText, direction, stepsNum);
+    onAnalyze(url, isRealtime ? null : fnText, direction, stepsNum);
   };
 
   return (
@@ -32,8 +33,33 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
           color: '#c4b5fd',
           fontFamily: 'Inter, sans-serif',
         }}>
-          Enter a GitHub URL and function name to trace.
+          {isRealtime 
+            ? 'Deploy repo and wait for real-time interaction to build graph.' 
+            : 'Enter a GitHub URL and function name to trace.'}
         </p>
+      </div>
+
+      {/* Mode Toggle */}
+      <div style={{ marginBottom: 18 }}>
+        <label className="field-label">Analysis Mode</label>
+        <div className="direction-toggle">
+          <button
+            type="button"
+            className={`direction-option ${!isRealtime ? 'active' : ''}`}
+            onClick={() => setIsRealtime(false)}
+            style={{ fontSize: '12px' }}
+          >
+            Static (Function Name)
+          </button>
+          <button
+            type="button"
+            className={`direction-option ${isRealtime ? 'active' : ''}`}
+            onClick={() => setIsRealtime(true)}
+            style={{ fontSize: '12px' }}
+          >
+            Real-time (Interaction)
+          </button>
+        </div>
       </div>
 
       {/* Repo URL */}
@@ -50,19 +76,23 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
       </div>
 
       {/* Function / action */}
-      <label className="field-label" style={{ marginTop: 14 }}>
-        Function / Action to Analyse
-      </label>
-      <div className="input-row">
-        <input
-          type="text"
-          className="repo-input"
-          placeholder="e.g. handleSubmit"
-          value={fnText}
-          onChange={e => { setFnText(e.target.value); setError(''); }}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-        />
-      </div>
+      {!isRealtime && (
+        <>
+          <label className="field-label" style={{ marginTop: 14 }}>
+            Function / Action to Analyse
+          </label>
+          <div className="input-row">
+            <input
+              type="text"
+              className="repo-input"
+              placeholder="e.g. handleSubmit"
+              value={fnText}
+              onChange={e => { setFnText(e.target.value); setError(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+            />
+          </div>
+        </>
+      )}
 
       {/* Direction + Steps row */}
       <div style={{ display: 'flex', gap: '12px', marginTop: 14, alignItems: 'stretch' }}>
@@ -117,7 +147,7 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
         disabled={loading}
         style={{ marginTop: 14 }}
       >
-        {loading ? 'Parsing…' : 'Analyze Flow →'}
+        {loading ? 'Preparing…' : isRealtime ? 'Start Real-time Session →' : 'Analyze Flow →'}
       </button>
 
       {loading && (

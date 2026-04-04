@@ -1,48 +1,34 @@
 const express = require('express');
 const router = express.Router();
 const dynamicStore = require('../services/dynamicStore');
+const sseService = require('../services/sseService');
+const { analyzeFunction } = require('../services/queryEngine');
 
-// ─── 📡 SSE CLIENT MANAGEMENT ──────────────────────────────────────────
-let clients = []; 
+// ─── 📡 STATE FOR REAL-TIME ROOT DETECTION ────────────────────────────
+let waitingForRealtimeRoot = false;
+let lastIgnoredTraceId = null; // 👈 Prevent immediate re-trigger from same trace
+let realtimeAnalysisOptions = { direction: 'forward', depth: 8 };
 
-function broadcastPulse(spansArray) {
-    if (clients.length === 0) return;
+function enableRealtimeWaiting(options = {}) {
+    waitingForRealtimeRoot = true;
+    realtimeAnalysisOptions = {
+        direction: options.direction || 'forward',
+        depth: parseInt(options.depth) || 8
+    };
+    console.log(`📡 Real-time mode: Waiting for next interaction (Direction: ${realtimeAnalysisOptions.direction}, Depth: ${realtimeAnalysisOptions.depth})...`);
+}
 
-    const message = `data: ${JSON.stringify({ type: 'pulse_batch', spans: spansArray })}\n\n`;
-
-    clients.forEach(client => {
-        // ✅ FIX: Access the .res property of the client object
-        try {
-            client.res.write(message);
-        } catch (err) {
-            console.error("Failed to write to client:", err);
-        }
-    });
-} 
+// ─── 📡 RESET ENDPOINT ────────────────────────────────────────────────
+router.post('/v1/reset', (req, res) => {
+    console.log("♻️ [Telemetry] Manual reset requested. Clearing filters.");
+    lastIgnoredTraceId = null; // 👈 Clear on manual reset
+    enableRealtimeWaiting(req.body);
+    res.json({ success: true, message: "Ready for next interaction." });
+});
 
 // ─── 📡 SSE ENDPOINT ──────────────────────────────────────────────────
 router.get('/v1/stream', (req, res) => {
-    // 1. Set headers for SSE
-    res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*', 
-        'X-Accel-Buffering': 'no' 
-    });
-
-    // 2. Immediate handshake
-    res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
-
-    // 3. Track client
-    const clientId = Date.now();
-    const newClient = { id: clientId, res };
-    clients.push(newClient);
-
-    // 4. Cleanup on disconnect
-    req.on('close', () => {
-        clients = clients.filter(c => c.id !== clientId);
-    });
+    sseService.addClient(req, res);
 });
 
 // ─── 📥 INGESTION & WATERFALL ENGINE ──────────────────────────────────
@@ -51,6 +37,7 @@ router.post('/v1/traces', (req, res) => {
         const resourceSpans = req.body.resourceSpans || [];
         let spanCount = 0;
         const validSpansForPulse = []; 
+        let rootCandidate = null;
 
         resourceSpans.forEach(resource => {
             resource.scopeSpans.forEach(scope => {
@@ -74,26 +61,106 @@ router.post('/v1/traces', (req, res) => {
 
                     const file = flatSpan.attributes['shinkei.static.file'];
                     const line = flatSpan.attributes['shinkei.static.line'];
+                    const staticFnName = flatSpan.attributes['shinkei.static.function'];
                     const name = flatSpan.name || "";
+                    const method = flatSpan.attributes['http.method'] || flatSpan.attributes['http.url'];
+                    const route = flatSpan.attributes['http.route'] || flatSpan.attributes['http.target'];
+                    const traceId = flatSpan.traceId;
 
-                    const isNoise = ['middleware', 'expressInit', 'query', 'cors', 'bodyParser', '<anonymous>']
-                        .some(str => name.toLowerCase().includes(str.toLowerCase()));
+                    // ── VERBOSE LOGGING FOR ROOT DETECTION ──
+                    if (waitingForRealtimeRoot && !rootCandidate) {
+                         const isNoise = ['middleware', 'expressInit', 'query', 'cors', 'bodyParser', '<anonymous>']
+                            .some(str => name.toLowerCase().includes(str.toLowerCase()));
 
-                    if (file && line && !isNoise) {
+                         if (traceId === lastIgnoredTraceId) {
+                             // console.log(`   ⏭️  Ignoring span from trace ${traceId} (already handled)`);
+                         } else if (isNoise) {
+                             console.log(`   💤 Skipping noise span: "${name}"`);
+                         } else if (file && line) {
+                             const rootName = staticFnName || name;
+                             console.log(`   🎯 [MATCH] Found static function: ${rootName} at ${file}:${line}`);
+                             rootCandidate = { name: rootName, file, line, traceId };
+                         } else if (method && route && route !== '/*') {
+                             console.log(`   🎯 [MATCH] Found HTTP route: ${method} ${route}`);
+                             rootCandidate = { name: `${method} ${route}`, isRoute: true, traceId };
+                         } else {
+                             // console.log(`   ❓ Span "${name}" lacks static metadata or route info.`);
+                         }
+                    }
+
+                    // Pulse data for valid spans (always processed if static info is present)
+                    if (file && line) {
                         validSpansForPulse.push({
                             nodeId: `${file}:${line}`,
-                            name: name,
+                            name: staticFnName || name,
                             rawStartTime: BigInt(flatSpan.startTime),
                             durationMs: Number(BigInt(flatSpan.endTime) - BigInt(flatSpan.startTime)) / 1_000_000,
-                            method: flatSpan.attributes['http.method'],
-                            route: flatSpan.attributes['http.route']
+                            method,
+                            route
                         });
                     }
                 });
             });
         });
 
-        // WATERFALL SORTING
+        // 🟢 REAL-TIME GRAPH GENERATION
+        if (waitingForRealtimeRoot && rootCandidate) {
+            console.log(`🚀 [Telemetry] Activating analysis for root: ${rootCandidate.name}`);
+            waitingForRealtimeRoot = false; 
+            lastIgnoredTraceId = rootCandidate.traceId; 
+
+            try {
+                const result = analyzeFunction(
+                    rootCandidate.name, 
+                    realtimeAnalysisOptions.direction, 
+                    realtimeAnalysisOptions.depth,
+                    rootCandidate.file
+                );
+
+                if (result && !result.error) {
+                    console.log(`📊 [Telemetry] Analysis successful. Broadcasting graph...`);
+                    const idMap = new Map();
+                    let counter = 0;
+                    const getNumericId = (id) => {
+                        if (!idMap.has(id)) idMap.set(id, counter++);
+                        return idMap.get(id);
+                    };
+
+                    const numericFlow = {
+                        root: "0",
+                        nodes: result.fullGraph.nodes.map(n => ({
+                            ...n,
+                            originalId: n.id,
+                            nodeId: n.nodeId,
+                            id: String(getNumericId(n.id))
+                        })),
+                        edges: result.fullGraph.edges.map(e => ({
+                            from: String(getNumericId(e.from)),
+                            to:   String(getNumericId(e.to))
+                        }))
+                    };
+
+                    sseService.broadcastGraph({
+                        flow: numericFlow,
+                        trace: result.flow,
+                        stats: result.stats,
+                        telemetry: result.telemetry,
+                        meta: result.meta
+                    });
+                } else {
+                    console.error(`❌ [Telemetry] Analysis failed for ${rootCandidate.name}:`, result?.error || "Unknown error");
+                    // 🟢 RECOVERY: If analysis failed, go back to waiting so the user can try another click
+                    waitingForRealtimeRoot = true; 
+                    console.log("🔄 [Telemetry] Re-entering waiting state due to analysis failure.");
+                }
+            } catch (analysisErr) {
+                console.error(`💥 [Telemetry] Analysis crashed for ${rootCandidate.name}:`, analysisErr.message);
+                waitingForRealtimeRoot = true; 
+                console.log("🔄 [Telemetry] Re-entering waiting state due to crash.");
+            }
+        }
+
+        // WATERFALL SORTING FOR PULSES
         if (validSpansForPulse.length > 0) {
             const traceStartTime = validSpansForPulse.reduce(
                 (min, p) => (p.rawStartTime < min ? p.rawStartTime : min), 
@@ -109,7 +176,7 @@ router.post('/v1/traces', (req, res) => {
                 route: p.route
             })).sort((a, b) => a.offsetMs - b.offsetMs);
 
-            broadcastPulse(waterfallData);
+            sseService.broadcastPulse(waterfallData);
         }
 
         res.status(200).send('Traces ingested');
@@ -120,3 +187,5 @@ router.post('/v1/traces', (req, res) => {
 });
 
 module.exports = router;
+module.exports.enableRealtimeWaiting = enableRealtimeWaiting;
+

@@ -10,15 +10,27 @@ export const LEVEL_DELAY = 550;
 // ── Build forward graph (root → children) ──────────────────────────────────
 export function buildForwardLayout(nodes, edges, rootId, maxSteps = Infinity) {
   const childMap = {};
-  nodes.forEach(n => (childMap[n.id] = []));
+  const rootStr = String(rootId);
+
+  nodes.forEach(n => (childMap[String(n.id)] = []));
   edges.forEach(e => {
-    if (childMap[e.from] !== undefined) childMap[e.from].push(e.to);
+    const fromStr = String(e.from);
+    if (childMap[fromStr] !== undefined) childMap[fromStr].push(String(e.to));
   });
 
   // BFS forward: assign levels via forward edges
   const levels = {};
-  const queue  = [rootId];
-  levels[rootId] = 0;
+  const queue  = [rootStr];
+  levels[rootStr] = 0;
+
+  // Fallback: If rootStr isn't in nodes, pick the first node as root
+  if (nodes.length > 0 && !nodes.some(n => String(n.id) === rootStr)) {
+    const fallbackRoot = String(nodes[0].id);
+    console.warn(`[graphLayout] rootId ${rootStr} not found. Falling back to ${fallbackRoot}`);
+    queue[0] = fallbackRoot;
+    levels[fallbackRoot] = 0;
+  }
+
   while (queue.length) {
     const cur = queue.shift();
     if (levels[cur] >= maxSteps) continue;
@@ -31,23 +43,22 @@ export function buildForwardLayout(nodes, edges, rootId, maxSteps = Infinity) {
   }
 
   // Second pass: some backends send reverse edges (from: child, to: parent)
-  // e.g. { from: 3, to: 2 } where node 3 is a route that feeds controller 2
-  // These nodes are never reached by forward BFS so we place them one level
-  // deeper than the node they point into
   let changed = true;
   while (changed) {
     changed = false;
     edges.forEach(e => {
-      if (levels[e.to] !== undefined && levels[e.from] === undefined) {
-        levels[e.from] = levels[e.to] + 1;
+      const toStr = String(e.to);
+      const fromStr = String(e.from);
+      if (levels[toStr] !== undefined && levels[fromStr] === undefined) {
+        levels[fromStr] = levels[toStr] + 1;
         changed = true;
       }
     });
   }
 
-  const reachable     = new Set(Object.keys(levels).map(Number));
-  const filteredNodes = nodes.filter(n => reachable.has(n.id));
-  const filteredEdges = edges.filter(e => reachable.has(e.from) && reachable.has(e.to));
+  const reachable     = new Set(Object.keys(levels));
+  const filteredNodes = nodes.filter(n => reachable.has(String(n.id)));
+  const filteredEdges = edges.filter(e => reachable.has(String(e.from)) && reachable.has(String(e.to)));
 
   return { ...calcLayout(filteredNodes, levels), filteredNodes, filteredEdges };
 }
@@ -55,14 +66,25 @@ export function buildForwardLayout(nodes, edges, rootId, maxSteps = Infinity) {
 // ── Build backward graph ───────────────────────────────────────────────────
 export function buildBackwardLayout(nodes, edges, rootId, maxSteps = Infinity) {
   const childMap = {};
-  nodes.forEach(n => (childMap[n.id] = []));
+  const rootStr = String(rootId);
+
+  nodes.forEach(n => (childMap[String(n.id)] = []));
   edges.forEach(e => {
-    if (childMap[e.from] !== undefined) childMap[e.from].push(e.to);
+    const fromStr = String(e.from);
+    if (childMap[fromStr] !== undefined) childMap[fromStr].push(String(e.to));
   });
 
   const levels = {};
-  const queue  = [rootId];
-  levels[rootId] = 0;
+  const queue  = [rootStr];
+  levels[rootStr] = 0;
+
+  // Fallback
+  if (nodes.length > 0 && !nodes.some(n => String(n.id) === rootStr)) {
+    const fallbackRoot = String(nodes[0].id);
+    queue[0] = fallbackRoot;
+    levels[fallbackRoot] = 0;
+  }
+
   while (queue.length) {
     const cur = queue.shift();
     if (levels[cur] >= maxSteps) continue;
@@ -74,25 +96,27 @@ export function buildBackwardLayout(nodes, edges, rootId, maxSteps = Infinity) {
     });
   }
 
-  // Same second pass for reverse edges
   let changed = true;
   while (changed) {
     changed = false;
     edges.forEach(e => {
-      if (levels[e.to] !== undefined && levels[e.from] === undefined) {
-        levels[e.from] = levels[e.to] + 1;
+      const toStr = String(e.to);
+      const fromStr = String(e.from);
+      if (levels[toStr] !== undefined && levels[fromStr] === undefined) {
+        levels[fromStr] = levels[toStr] + 1;
         changed = true;
       }
     });
   }
 
-  const reachable     = new Set(Object.keys(levels).map(Number));
-  const filteredNodes = nodes.filter(n => reachable.has(n.id));
-  const filteredEdges = edges.filter(e => reachable.has(e.from) && reachable.has(e.to));
+  const reachable     = new Set(Object.keys(levels));
+  const filteredNodes = nodes.filter(n => reachable.has(String(n.id)));
+  const filteredEdges = edges.filter(e => reachable.has(String(e.from)) && reachable.has(String(e.to)));
 
   const maxSoFar = Math.max(0, ...Object.values(levels));
   filteredNodes.forEach(n => {
-    if (levels[n.id] === undefined) levels[n.id] = maxSoFar + 1;
+    const nid = String(n.id);
+    if (levels[nid] === undefined) levels[nid] = maxSoFar + 1;
   });
 
   return { ...calcLayout(filteredNodes, levels, true), filteredNodes, filteredEdges };
@@ -102,10 +126,13 @@ function calcLayout(nodes, levels, flipY = false) {
   const byDepth = {};
   Object.entries(levels).forEach(([id, d]) => {
     if (!byDepth[d]) byDepth[d] = [];
-    byDepth[d].push(Number(id));
+    byDepth[d].push(id);
   });
 
-  const maxDepth = Math.max(...Object.keys(byDepth).map(Number));
+  const depthKeys = Object.keys(byDepth).map(Number);
+  if (depthKeys.length === 0) return { pos: {}, levels: {}, svgW: 0, svgH: 0 };
+
+  const maxDepth = Math.max(...depthKeys);
   const maxRowW  = Math.max(
     ...Object.values(byDepth).map(row => row.length * NW + (row.length - 1) * HGAP)
   );
@@ -123,7 +150,7 @@ function calcLayout(nodes, levels, flipY = false) {
     });
   }
 
-  const svgW = maxRowW + PAD * 2;
+  const svgW = Math.max(800, maxRowW + PAD * 2);
   const svgH = totalH + PAD * 2 + 20;
   return { pos, levels, svgW, svgH };
 }

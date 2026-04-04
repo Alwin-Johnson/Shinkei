@@ -1,32 +1,50 @@
 const { fetchRepoAsZip } = require("../utils/githubZipHandler");
 const { index } = require("../services/indexBuilder"); 
 const { analyzeFunction } = require("../services/queryEngine");
+const telemetryRoutes = require("../routes/telemetry.routes");
 
 exports.analyzeRepo = async (req, res) => {
     try {
         const { repoUrl, entryFunction, direction, depth } = req.body;
 
-        if (!repoUrl || !entryFunction) {
+        if (!repoUrl) {
             return res.status(400).json({
                 success: false,
-                error: "repoUrl and entryFunction are required.",
+                error: "repoUrl is required.",
             });
         }
 
         const directionSafe = direction === "backward" ? "backward" : "forward";
         const depthSafe = (depth && Number.isInteger(Number(depth)) && Number(depth) > 0)
             ? Number(depth)
-            : null;
+            : 8;
 
-        // 🟢 UPDATE 1: Pass 'true' to trigger OpenTelemetry injection
         console.log(`🔍 Starting analysis for: ${repoUrl}`);
-        const repoPath = await fetchRepoAsZip(repoUrl, true); 
         
-        // 1. BUILD STEP
+        // 🟢 UPDATE: Only run dynamic tracing if we are in Real-time mode (no entryFunction)
+        const isRealtimeMode = !entryFunction;
+        const repoPath = await fetchRepoAsZip(repoUrl, isRealtimeMode); 
+        
+        // 1. BUILD STEP (Static AST Indexing)
         await index.build(repoPath);
 
-        // 2. ANALYZE STEP 
-        // This now returns { flow, fullGraph, stats, telemetry, meta }
+        // 2. CHECK MODE: Static or Real-time?
+        if (isRealtimeMode) {
+            // 🟢 REAL-TIME MODE
+            console.log("📡 No entry function provided. Entering Real-time mode.");
+            telemetryRoutes.enableRealtimeWaiting({
+                direction: directionSafe,
+                depth: depthSafe
+            });
+
+            return res.json({
+                success: true,
+                mode: "realtime",
+                message: "Environment ready. Waiting for user interaction in the target app..."
+            });
+        }
+
+        // 3. ANALYZE STEP (Static Mode)
         const result = analyzeFunction(
             entryFunction,
             directionSafe,
@@ -53,31 +71,30 @@ exports.analyzeRepo = async (req, res) => {
             };
 
             return {
-        root: "0", // Keeping root consistent with numeric strings
-        nodes: nodes.map(n => ({
-            ...n,
-            originalId: n.id,
-            // Create the searchable ID for Telemetry pulses
-            nodeId: n.nodeId,
-            // The numeric ID used for the layout engine positions
-            id: getNumericId(n.id), 
-        })),
-        edges: edges.map(e => ({
-            from: getNumericId(e.from),
-            to:   getNumericId(e.to),
-        })),
-    };
-};
+                root: "0",
+                nodes: nodes.map(n => ({
+                    ...n,
+                    originalId: n.id,
+                    nodeId: n.nodeId,
+                    id: String(getNumericId(n.id)), 
+                })),
+                edges: edges.map(e => ({
+                    from: String(getNumericId(e.from)),
+                    to:   String(getNumericId(e.to)),
+                })),
+            };
+        };
         const numericFlow = formatToNumericFlow(result.fullGraph.nodes, result.fullGraph.edges);
 
         // ── FINAL RESPONSE ────────────────────────────────────────────────
         return res.json({ 
             success: true, 
+            mode: "static",
             flow: numericFlow, 
             trace: result.flow, 
             stats: result.stats,
-            telemetry: result.telemetry, // 🟢 UPDATE 2: Expose OTel data to Frontend
-            meta: result.meta            // 🟢 UPDATE 3: Expose meta (entryType, etc.)
+            telemetry: result.telemetry,
+            meta: result.meta
         });
 
     } catch (err) {
@@ -88,3 +105,4 @@ exports.analyzeRepo = async (req, res) => {
         });
     }
 };
+

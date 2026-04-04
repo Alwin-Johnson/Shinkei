@@ -158,8 +158,7 @@ function findEventHandler(eventName, element) {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 
-function analyzeFunction(input, direction = "forward", maxDepth = null) {
-
+function analyzeFunction(input, direction = "forward", maxDepth = null, fileHint = null) {
     const entry = resolveEntry(input);
 
 
@@ -189,7 +188,7 @@ function analyzeFunction(input, direction = "forward", maxDepth = null) {
 
         }
 
-        
+
 
         // 👈 NEW: Fetch live telemetry data for this route before running the trace
 
@@ -236,13 +235,14 @@ function analyzeFunction(input, direction = "forward", maxDepth = null) {
 
     // ── Function entry (default) ──────────────────────────────────────────────
 
-    const fnInfo = resolver.findFunction(entry.name);
+    const fnInfo = resolver.findFunction(entry.name, fileHint);
 
     if (!fnInfo) {
 
         return { error: `Function "${input}" not found in index.` };
 
     }
+
 
     return direction === "backward"
 

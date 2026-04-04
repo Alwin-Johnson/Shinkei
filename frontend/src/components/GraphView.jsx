@@ -63,10 +63,9 @@ function FloatingOrbs() {
   );
 }
 
-export default function GraphView({ isOpen, flow, trace, loading, onBackToWorkspace, initialDirection = 'forward', maxSteps = 10 }) {
+export default function GraphView({ isOpen, flow, trace, loading, onBackToWorkspace, onAnalyzeAgain, initialDirection = 'forward', maxSteps = 10, isRealtime = false }) {
 
   // ── Telemetry Live Stream Logic ──
-// ── Telemetry Live Stream Logic ──
   useEffect(() => {
     if (!isOpen) return;
 
@@ -83,14 +82,11 @@ export default function GraphView({ isOpen, flow, trace, loading, onBackToWorksp
           const MIN_GAP_MS = 300;
 
           data.spans.forEach((pulse, index) => {
-            // We calculate delay based on real offset PLUS its position in the batch
-            // This guarantees they never fire simultaneously even if offsetMs is 0
             const visualDelay = (pulse.offsetMs * DILATION_FACTOR) + (index * MIN_GAP_MS);
 
             setTimeout(() => {
               if (pulse.nodeId) {
                 animateGraphNode(pulse.nodeId);
-                console.log(`🌊 Flow: [${pulse.nodeId}] at visual delay +${visualDelay}ms`);
               } else if (pulse.route) {
                 const routeId = `${pulse.method}:${pulse.route}`;
                 animateGraphRoute(routeId, pulse.durationMs);
@@ -121,24 +117,18 @@ export default function GraphView({ isOpen, flow, trace, loading, onBackToWorksp
     target.classList.remove('live-pulse');
     void target.offsetWidth; // Force Reflow
     target.classList.add('live-pulse');
-
-    // 🟢 Matches the 2-second CSS animation
-    
   };
-const animateGraphRoute = (routeId, duration) => {
-  const el = document.getElementById(routeId);
-  if (!el) return;
 
-  // 1. Reset and Force Restart (Same logic as nodes)
-  el.classList.remove('route-active');
-  void el.offsetWidth; 
+  const animateGraphRoute = (routeId, duration) => {
+    const el = document.getElementById(routeId);
+    if (!el) return;
 
-  // 2. Trigger the route pulse
-  el.classList.add('route-active');
-  
-  // 3. Cleanup
-  setTimeout(() => el.classList.remove('route-active'), 1000);
-};
+    el.classList.remove('route-active');
+    void el.offsetWidth; 
+
+    el.classList.add('route-active');
+    setTimeout(() => el.classList.remove('route-active'), 1000);
+  };
 
   return (
     <AnimatePresence initial={false}>
@@ -176,47 +166,90 @@ const animateGraphRoute = (routeId, duration) => {
               alignItems: 'center',
               justifyContent: 'space-between',
             }}>
-              {/* Left: Back button */}
-              <button
-                onClick={onBackToWorkspace}
-                style={{
-                  background: 'rgba(139,92,246,0.06)',
-                  border: '1px solid rgba(139,92,246,0.12)',
-                  borderRadius: '10px',
-                  color: '#a78bfa',
-                  fontSize: '13px',
-                  padding: '7px 14px',
-                  cursor: 'pointer',
-                  fontFamily: "'Inter', sans-serif",
-                  fontWeight: 500,
-                  letterSpacing: '0.01em',
-                  transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '7px',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.borderColor = 'rgba(139,92,246,0.35)';
-                  e.currentTarget.style.background = 'rgba(139,92,246,0.12)';
-                  e.currentTarget.style.color = '#c4b5fd';
-                  e.currentTarget.style.transform = 'translateX(-2px)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.borderColor = 'rgba(139,92,246,0.12)';
-                  e.currentTarget.style.background = 'rgba(139,92,246,0.06)';
-                  e.currentTarget.style.color = '#a78bfa';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <ArrowLeft style={{ width: 14, height: 14 }} />
-                Back
-              </button>
+              {/* Left: Actions */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button
+                  onClick={onBackToWorkspace}
+                  style={{
+                    background: 'rgba(139,92,246,0.06)',
+                    border: '1px solid rgba(139,92,246,0.12)',
+                    borderRadius: '10px',
+                    color: '#a78bfa',
+                    fontSize: '13px',
+                    padding: '7px 14px',
+                    cursor: 'pointer',
+                    fontFamily: "'Inter', sans-serif",
+                    fontWeight: 500,
+                    letterSpacing: '0.01em',
+                    transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '7px',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = 'rgba(139,92,246,0.35)';
+                    e.currentTarget.style.background = 'rgba(139,92,246,0.12)';
+                    e.currentTarget.style.color = '#c4b5fd';
+                    e.currentTarget.style.transform = 'translateX(-2px)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = 'rgba(139,92,246,0.12)';
+                    e.currentTarget.style.background = 'rgba(139,92,246,0.06)';
+                    e.currentTarget.style.color = '#a78bfa';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                  }}
+                >
+                  <ArrowLeft style={{ width: 14, height: 14 }} />
+                  Back
+                </button>
+
+                {/* Right: Analyze Again (Real-time only) */}
+                {flow && isRealtime && onAnalyzeAgain && (
+                  <button
+                    onClick={onAnalyzeAgain}
+                    style={{
+                      background: 'rgba(16,185,129,0.06)',
+                      border: '1px solid rgba(16,185,129,0.12)',
+                      borderRadius: '10px',
+                      color: '#10b981',
+                      fontSize: '12px',
+                      padding: '7px 14px',
+                      cursor: 'pointer',
+                      fontFamily: "'Inter', sans-serif",
+                      fontWeight: 500,
+                      letterSpacing: '0.01em',
+                      transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '7px',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = 'rgba(16,185,129,0.35)';
+                      e.currentTarget.style.background = 'rgba(16,185,129,0.12)';
+                      e.currentTarget.style.color = '#34d399';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = 'rgba(16,185,129,0.12)';
+                      e.currentTarget.style.background = 'rgba(16,185,129,0.06)';
+                      e.currentTarget.style.color = '#10b981';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <Activity style={{ width: 13, height: 13 }} />
+                    Analyze Next Click
+                  </button>
+                )}
+              </div>
 
               {/* Center: Brand */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '9px',
+                position: 'absolute',
+                left: '50%',
+                transform: 'translateX(-50%)'
               }}>
                 <div style={{
                   position: 'relative',
@@ -415,7 +448,7 @@ const animateGraphRoute = (routeId, duration) => {
                     color: '#cbd5e1',
                     letterSpacing: '-0.01em',
                   }}>
-                    Building call graph
+                    {isRealtime ? 'Waiting for Interaction' : 'Building call graph'}
                   </span>
                   <span style={{
                     fontFamily: "'JetBrains Mono', monospace",
@@ -423,7 +456,9 @@ const animateGraphRoute = (routeId, duration) => {
                     color: '#64748b',
                     letterSpacing: '0.04em',
                   }}>
-                    Parsing AST and resolving edges…
+                    {isRealtime 
+                      ? 'Click any button on the target application to begin tracing…' 
+                      : 'Parsing AST and resolving edges…'}
                   </span>
                 </div>
               </div>

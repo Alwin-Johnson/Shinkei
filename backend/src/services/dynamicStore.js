@@ -121,6 +121,17 @@ class DynamicStore {
     }
 
 
+    getMetricsForRoute(method, route) {
+
+        if (!method || !route) return null;
+
+        const routeKey = `${method.toUpperCase()}:${route}`;
+
+        return this.routeMetrics.get(routeKey) || null;
+
+    }
+
+
     getMetrics() {
 
         return Object.fromEntries(this.routeMetrics);

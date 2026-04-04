@@ -10,7 +10,13 @@ export default function FlowViewer({ flowData, graphData, loading, initialDirect
     setDirection(initialDirection);
   }, [initialDirection]);
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div style={{ height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {/* Empty container just to keep layout stable while GraphView shows its loading overlay */}
+      </div>
+    );
+  }
 
   if (!flowData || flowData.length === 0) {
     return (
