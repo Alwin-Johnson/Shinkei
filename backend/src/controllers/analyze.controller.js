@@ -95,7 +95,7 @@ exports.analyzeRepo = async (req, res) => {
         });
 
     } catch (err) {
-        console.error("[analyze] crash:", err.message);
+        console.error("[analyze] crash:", err.stack);
         return res.status(500).json({
             success: false,
             error: "Failed to analyze repo: " + err.message,
