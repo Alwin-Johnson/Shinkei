@@ -4,6 +4,40 @@ const { analyzeFunction } = require("../services/queryEngine");
 const dynamicStore = require("../services/dynamicStore");
 const { resetRealtimeState } = require("./telemetryController");
 
+function isValidGithubRepoUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== "string") {
+        return false;
+    }
+
+    const trimmed = rawUrl.trim();
+    if (!trimmed) {
+        return false;
+    }
+
+    const normalized = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+    try {
+        const parsed = new URL(normalized);
+        const hostname = parsed.hostname.toLowerCase();
+        if (hostname !== "github.com" && hostname !== "www.github.com") {
+            return false;
+        }
+
+        const segments = parsed.pathname.split("/").filter(Boolean);
+        if (segments.length < 2) {
+            return false;
+        }
+
+        const owner = segments[0];
+        const repo = segments[1].replace(/\.git$/i, "");
+        const segmentPattern = /^[A-Za-z0-9_.-]+$/;
+
+        return Boolean(owner && repo && segmentPattern.test(owner) && segmentPattern.test(repo));
+    } catch (e) {
+        return false;
+    }
+}
+
 exports.analyzeRepo = async (req, res) => {
     try {
         const { repoUrl, entryFunction, direction, depth, options } = req.body;
@@ -12,6 +46,13 @@ exports.analyzeRepo = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 error: "repoUrl is required.",
+            });
+        }
+
+        if (!isValidGithubRepoUrl(repoUrl)) {
+            return res.status(400).json({
+                success: false,
+                error: "Invalid repoUrl. Expected github.com/owner/repo.",
             });
         }
 

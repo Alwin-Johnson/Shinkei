@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Hexagon, Activity, GitBranch, Layers, Zap } from 'lucide-react';
 import FlowViewer from './FlowViewer';
@@ -242,6 +242,34 @@ export default function GraphView({
     el.classList.add('route-active');
     setTimeout(() => el.classList.remove('route-active'), 1000);
   };
+
+  const connectionCount = useMemo(() => {
+    if (!Array.isArray(flow?.edges)) {
+      return 0;
+    }
+
+    const uniqueConnections = new Set(
+      flow.edges
+        .filter(e => e && e.from != null && e.to != null)
+        .map(e => `${e.from}->${e.to}`)
+    );
+
+    return uniqueConnections.size;
+  }, [flow]);
+
+  const totalNodeCount = useMemo(() => {
+    if (!Array.isArray(flow?.nodes)) {
+      return 0;
+    }
+
+    const uniqueNodes = new Set(
+      flow.nodes
+        .filter(n => n && n.id != null)
+        .map(n => String(n.id))
+    );
+
+    return uniqueNodes.size;
+  }, [flow]);
 
   return (
     <AnimatePresence initial={false}>
@@ -514,7 +542,7 @@ export default function GraphView({
                     {flow.nodes?.length || 0} nodes
                     <span style={{ color: '#334155' }}>·</span>
                     <Zap style={{ width: 11, height: 11, opacity: 0.6 }} />
-                    {flow.edges?.length || 0} connections
+                    {connectionCount} connections
                   </div>
                 </div>
               </div>
@@ -542,7 +570,10 @@ export default function GraphView({
                 zIndex: 2,
               }}
             >
-              <StatsBar flow={trace} />
+              <StatsBar
+                flow={Array.isArray(trace) && trace.length > 0 ? trace : (flow.nodes || [])}
+                totalNodes={totalNodeCount}
+              />
             </motion.div>
           )}
 

@@ -23,3 +23,8 @@ export const TYPE_LABEL = {
   api: 'API Route',
   response: 'Response',
 };
+
+export const LAYER_COLOR = {
+  frontend: '#60A5FA',
+  backend: '#22C993',
+};

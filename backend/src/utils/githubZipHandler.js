@@ -71,7 +71,18 @@ async function fetchRepoAsZip(repoUrl, runDynamic = false, options = {}) {
     const extractPath = path.join(TEMP_DIR, `${repo}-${uniqueId}`);
     const zipPath = path.join(TEMP_DIR, `${repo}-${uniqueId}.zip`);
 
-    await downloadZip(getZipUrl(repoUrl), zipPath);
+    try {
+        await downloadZip(getZipUrl(repoUrl), zipPath);
+    } catch (err) {
+        const status = err?.response?.status;
+        if (status === 404) {
+            throw new Error("Repository not found on GitHub. Verify owner/repo and try again.");
+        }
+        if (status === 401 || status === 403) {
+            throw new Error("Repository exists but is not accessible (private or rate-limited).");
+        }
+        throw new Error(`Failed to download repository archive: ${err.message}`);
+    }
     
     const zip = new AdmZip(zipPath);
     zip.extractAllTo(extractPath, true);

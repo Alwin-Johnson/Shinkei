@@ -255,7 +255,7 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
       <style>{`
         .fg-shell {
           --fg-code-panel-width: clamp(432px, 40.8vw, 576px);
-          --fg-code-panel-height: clamp(420px, 72vh, 820px);
+          --fg-code-panel-height: clamp(520px, 83vh, 980px);
           position: relative;
           width: 100%;
           max-width: 100%;
@@ -264,10 +264,6 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
           align-items: flex-start;
           gap: 0;
           overflow: visible;
-          transition: gap 0.5s cubic-bezier(0.22,1,0.36,1);
-        }
-        .fg-shell.has-active {
-          gap: 16px;
         }
 
         .fg-graph-panel {
@@ -277,10 +273,6 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
           display: flex;
           flex-direction: column;
           overflow: hidden;
-          transition: width 0.5s cubic-bezier(0.22,1,0.36,1);
-        }
-        .fg-graph-panel.has-active {
-          width: calc(100% - var(--fg-code-panel-width) - 16px);
         }
 
         .fg-hint {
@@ -329,17 +321,18 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
         }
 
         .fg-code-panel {
-          position: sticky;
-          top: 84px;
-          align-self: flex-start;
-          flex: 0 0 0;
+          position: absolute;
+          right: 16px;
+          top: 58px;
+          z-index: 14;
+          flex: 0 0 auto;
           width: 0;
           max-width: 0;
           height: min(var(--fg-code-panel-height), calc(100vh - 96px));
           overflow: hidden;
           scrollbar-width: none;
           -ms-overflow-style: none;
-          transform: translateX(24px);
+          transform: translate3d(16px, 0, 0) scale(0.985);
           opacity: 0;
           transition: flex-basis 0.5s cubic-bezier(0.22,1,0.36,1),
                       width 0.5s cubic-bezier(0.22,1,0.36,1),
@@ -347,22 +340,24 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
                       transform 0.5s cubic-bezier(0.22,1,0.36,1),
                       opacity 0.4s ease;
           pointer-events: none;
-          border: 1px solid transparent;
+          border: 1px solid rgba(139,92,246,0.12);
           border-radius: 16px;
-          background: rgba(15,10,30,0.97);
-          box-shadow: 0 18px 48px rgba(2,6,23,0.28), 0 0 0 1px rgba(139,92,246,0.05);
+          background: rgba(12,10,26,0.58);
+          backdrop-filter: blur(18px) saturate(1.25);
+          -webkit-backdrop-filter: blur(18px) saturate(1.25);
+          box-shadow: 0 26px 70px rgba(2,6,23,0.5), 0 0 0 1px rgba(139,92,246,0.08);
         }
         .fg-code-panel::-webkit-scrollbar {
           display: none;
         }
         .fg-code-panel.has-active {
-          flex: 0 0 var(--fg-code-panel-width);
+          flex: 0 0 auto;
           width: var(--fg-code-panel-width);
           max-width: min(100%, var(--fg-code-panel-width));
-          transform: translateX(0);
+          transform: translate3d(0, 0, 0) scale(1);
           opacity: 1;
           pointer-events: all;
-          border-color: rgba(139,92,246,0.1);
+          border-color: rgba(139,92,246,0.22);
           overflow: hidden;
         }
 
@@ -398,6 +393,9 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
 
           .fg-code-panel {
             display: none;
+            position: relative;
+            right: auto;
+            top: auto;
             flex-basis: auto;
             height: min(70vh, 420px);
             max-width: 100%;

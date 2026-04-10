@@ -1,6 +1,36 @@
 import { useState } from 'react';
 import { Link2, Code2, ArrowRight, Loader2, ChevronRight } from 'lucide-react';
 
+function isValidGithubRepoUrl(rawUrl) {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const normalized = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(normalized);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname !== 'github.com' && hostname !== 'www.github.com') {
+      return false;
+    }
+
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (segments.length < 2) {
+      return false;
+    }
+
+    const owner = segments[0];
+    const repo = segments[1].replace(/\.git$/i, '');
+    const segmentPattern = /^[A-Za-z0-9_.-]+$/;
+
+    return Boolean(owner && repo && segmentPattern.test(owner) && segmentPattern.test(repo));
+  } catch {
+    return false;
+  }
+}
+
 // ── Animated step pipeline shown during loading ──
 function LoadingPipeline() {
   const steps = ['Cloning repo', 'Parsing AST', 'Resolving imports', 'Building graph'];
@@ -67,11 +97,30 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
   const [fnText, setFnText] = useState('');
   const [direction, setDirection] = useState('forward');
   const [steps, setSteps] = useState('10');
+  const [urlError, setUrlError] = useState('');
   const [error, setError] = useState('');
   const [isRealtime, setIsRealtime] = useState(false);
 
-  const handleSubmit = () => {
-    if (!url.trim()) { setError('Enter a valid GitHub repository URL'); return; }
+  const validateUrl = (value) => {
+    if (!value.trim()) {
+      setUrlError('Enter a GitHub repository URL');
+      return false;
+    }
+
+    if (!isValidGithubRepoUrl(value)) {
+      setUrlError('Enter a valid GitHub repo URL (github.com/owner/repo)');
+      return false;
+    }
+
+    setUrlError('');
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateUrl(url)) {
+      setError('');
+      return;
+    }
     if (!isRealtime && !fnText.trim()) { setError('Specify a function or action to trace'); return; }
     setError('');
 
@@ -83,7 +132,10 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
       backendPort: 8000
     } : null;
 
-    onAnalyze(url, isRealtime ? null : fnText, finalDirection, stepsNum, options);
+    const result = await onAnalyze(url, isRealtime ? null : fnText, finalDirection, stepsNum, options);
+    if (result && !result.success) {
+      setError(result.error || 'Analysis failed.');
+    }
   };
 
   return (
@@ -136,7 +188,7 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
 
       {/* Repo URL */}
       <label className="field-label">Repository</label>
-      <div className="input-row">
+      <div className={`input-row ${urlError ? 'input-row-invalid' : ''}`}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -150,11 +202,39 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
           className="repo-input"
           placeholder="github.com/user/repo"
           value={url}
-          onChange={e => { setUrl(e.target.value); setError(''); }}
+          onChange={e => {
+            setUrl(e.target.value);
+            setError('');
+            if (urlError) {
+              validateUrl(e.target.value);
+            }
+          }}
+          onBlur={() => {
+            if (url.trim()) {
+              validateUrl(url);
+            }
+          }}
           onKeyDown={e => e.key === 'Enter' && handleSubmit()}
           style={{ paddingLeft: '8px' }}
         />
       </div>
+
+      {urlError && (
+        <p className="input-error" style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+        }}>
+          <span style={{
+            width: 4,
+            height: 4,
+            borderRadius: '50%',
+            background: '#f87171',
+            flexShrink: 0,
+          }} />
+          {urlError}
+        </p>
+      )}
 
       {/* Static-only Fields */}
       {!isRealtime && (

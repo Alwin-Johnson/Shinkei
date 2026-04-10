@@ -83,7 +83,9 @@ export default function CodePanel({ node, onClose }) {
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
-      background: 'rgba(15,10,30,0.97)',
+      background: 'linear-gradient(180deg, rgba(17,12,34,0.78) 0%, rgba(13,10,28,0.72) 100%)',
+      backdropFilter: 'blur(14px) saturate(1.2)',
+      WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
       fontFamily: "'JetBrains Mono', monospace",
     }}>
 
@@ -316,64 +318,52 @@ export default function CodePanel({ node, onClose }) {
       ) : (
         <div style={{
           flex: 1,
-          overflowY: 'auto',
-          display: 'flex',
+          overflow: 'auto',
+          background: 'rgba(12,10,24,0.18)',
         }}>
-          {/* Line numbers */}
-          <div style={{
-            padding: '16px 0',
-            minWidth: 44,
-            background: 'rgba(26,16,53,0.3)',
-            borderRight: '1px solid rgba(139,92,246,0.06)',
-            textAlign: 'right',
-            userSelect: 'none',
-            flexShrink: 0,
-          }}>
-            {lines.map((_, i) => (
-              <div
-                key={i}
-                style={{
-                  fontSize: 11,
-                  color: hoveredLine === i ? '#a78bfa' : '#475569',
-                  lineHeight: '1.7',
-                  paddingRight: 12,
-                  paddingLeft: 8,
-                  transition: 'color 0.15s',
-                }}
-              >
-                {(node.startLine ?? node.line ?? 1) + i}
-              </div>
-            ))}
-          </div>
-
-          {/* Code */}
-          <pre style={{
-            margin: 0,
-            padding: '16px 20px',
-            fontSize: 13,
-            lineHeight: '1.7',
-            overflowX: 'auto',
-            flex: 1,
-            whiteSpace: 'pre',
-            color: '#e2e8f0',
-          }}>
+          <div style={{ minWidth: 'max-content', minHeight: '100%' }}>
             {lines.map((line, i) => (
               <div
                 key={i}
                 onMouseEnter={() => setHoveredLine(i)}
                 onMouseLeave={() => setHoveredLine(-1)}
                 style={{
+                  display: 'grid',
+                  gridTemplateColumns: '44px minmax(0, 1fr)',
+                  alignItems: 'start',
                   background: hoveredLine === i ? 'rgba(139,92,246,0.06)' : 'transparent',
-                  margin: '0 -20px',
-                  padding: '0 20px',
-                  borderLeft: hoveredLine === i ? `2px solid ${t}50` : '2px solid transparent',
-                  transition: 'all 0.15s',
+                  transition: 'background 0.15s',
                 }}
               >
-                {highlight(line + '\n')}
+                <div style={{
+                  fontSize: 11,
+                  color: hoveredLine === i ? '#a78bfa' : '#475569',
+                  lineHeight: '1.7',
+                  paddingRight: 12,
+                  paddingLeft: 8,
+                  userSelect: 'none',
+                  textAlign: 'right',
+                  background: 'rgba(26,16,53,0.3)',
+                  borderRight: '1px solid rgba(139,92,246,0.06)',
+                  transition: 'color 0.15s',
+                }}>
+                  {(node.startLine ?? node.line ?? 1) + i}
+                </div>
+
+                <pre style={{
+                  margin: 0,
+                  fontSize: 13,
+                  lineHeight: '1.7',
+                  whiteSpace: 'pre',
+                  color: '#e2e8f0',
+                  padding: '0 20px 0 18px',
+                  borderLeft: hoveredLine === i ? `2px solid ${t}50` : '2px solid transparent',
+                }}>
+                  {highlight(line)}
+                </pre>
               </div>
             ))}
-          </pre>
+          </div>
         </div>
       )}
 

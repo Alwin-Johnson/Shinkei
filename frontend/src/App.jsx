@@ -137,7 +137,9 @@ function App() {
     const data = await response.json();
 
     // 🛑 ABORT if a newer analysis was started while we were waiting
-    if (analysisId !== currentAnalysisId) return;
+    if (analysisId !== currentAnalysisId) {
+      return { success: false, error: 'Analysis cancelled.' };
+    }
 
     if (!response.ok || !data.success) {
       console.error('Analysis failed:', data.error);
@@ -147,20 +149,30 @@ function App() {
       setIsWaitingForRealtime(false);
       setIsRealtimeSession(false);
       setIsAutoOpening(false);
+      return {
+        success: false,
+        error: data?.error || 'Analysis failed. Please check your repository and function name.'
+      };
     } else {
       if (data.mode === 'static') {
         setFlow(data.flow);
         setTrace(data.trace);
         setLoading(false);
+        setView('graph');
+        return { success: true };
       } else {
         // Real-time mode: we stay in loading state until the graph is pushed via SSE
         console.log('📡 Waiting for real-time interaction...');
         setLoading(false); // Main request is done, now we just wait for SSE
+        setView('graph');
+        return { success: true };
       }
     }
 
   } catch (err) {
-    if (analysisId !== currentAnalysisId) return;
+    if (analysisId !== currentAnalysisId) {
+      return { success: false, error: 'Analysis cancelled.' };
+    }
     console.error('Network error:', err);
     setFlow(null);
     setTrace(null);
@@ -168,10 +180,7 @@ function App() {
     setIsWaitingForRealtime(false);
     setIsRealtimeSession(false);
     setIsAutoOpening(false);
-  } finally {
-    if (analysisId === currentAnalysisId) {
-      setView('graph');
-    }
+    return { success: false, error: 'Unable to reach analyzer service.' };
   }
 };
 

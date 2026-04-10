@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Layers, Monitor, Server, Zap } from 'lucide-react';
+import { Layers, Monitor, Server, Zap, GitBranch } from 'lucide-react';
+import { NODE_TYPES, LAYER_COLOR } from '../constants/nodeTypes';
 
 function AnimatedNumber({ value, delay = 0 }) {
   const [display, setDisplay] = useState(0);
@@ -71,35 +72,45 @@ const STAT_CONFIG = [
   {
     key: 'total',
     label: 'Total Nodes',
-    color: '#a78bfa',
+    color: NODE_TYPES.function.accent,
     Icon: Layers,
   },
   {
     key: 'frontend',
     label: 'Frontend',
-    color: '#60a5fa',
+    color: LAYER_COLOR.frontend,
     Icon: Monitor,
   },
   {
     key: 'backend',
     label: 'Backend',
-    color: '#34d399',
+    color: LAYER_COLOR.backend,
     Icon: Server,
   },
   {
     key: 'api',
     label: 'API Calls',
-    color: '#fbbf24',
+    color: NODE_TYPES.api.accent,
     Icon: Zap,
+  },
+  {
+    key: 'eventsRoutes',
+    label: 'Events & Routes',
+    color: NODE_TYPES.route.accent,
+    Icon: GitBranch,
   },
 ];
 
-export default function StatsBar({ flow }) {
+export default function StatsBar({ flow, totalNodes }) {
+  const safeFlow = Array.isArray(flow) ? flow : [];
+  const safeTotalNodes = Number.isFinite(totalNodes) ? totalNodes : safeFlow.length;
+
   const values = {
-    total:    flow.length,
-    frontend: flow.filter(s => s.layer === 'frontend' || s.type === 'event').length,
-    backend:  flow.filter(s => s.layer === 'backend'  || s.type === 'route').length,
-    api:      flow.filter(s => s.type === 'api'       || s.type === 'external').length,
+    total:    safeTotalNodes,
+    frontend: safeFlow.filter(s => s.layer === 'frontend').length,
+    backend:  safeFlow.filter(s => s.layer === 'backend').length,
+    api:      safeFlow.filter(s => s.type === 'api'       || s.type === 'external').length,
+    eventsRoutes: safeFlow.filter(s => s.type === 'event' || s.type === 'route').length,
   };
 
   const maxVal = Math.max(1, ...Object.values(values));
@@ -107,7 +118,7 @@ export default function StatsBar({ flow }) {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'repeat(4, 1fr)',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
       gap: '8px',
       marginBottom: '12px',
     }}>

@@ -226,7 +226,7 @@ function analyzeFunction(input, direction = "forward", maxDepth = null, fileHint
 
     if (!fnInfo) {
 
-        return { error: `Function "${input}" not found in index.` };
+        return { error: `Function not found: "${input}".` };
 
     }
 
