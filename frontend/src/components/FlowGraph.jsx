@@ -211,7 +211,138 @@ function NodeCard({ node, pos, isRoot, isActive, onClick, level, visible }) {
 export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 10 }) {
   const [activeId, setActiveId] = useState(null);
   const [animReady, setAnimReady] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(560);
+  const [panelHeight, setPanelHeight] = useState(760);
+  const [isResizingPanel, setIsResizingPanel] = useState(false);
+  const [isResizingPanelHeight, setIsResizingPanelHeight] = useState(false);
+  const [isResizingPanelCorner, setIsResizingPanelCorner] = useState(false);
   const scrollRef = useRef(null);
+  const panelRef = useRef(null);
+  const resizeRafRef = useRef(null);
+
+  const queueResizeUpdate = useCallback((nextWidth, nextHeight) => {
+    if (resizeRafRef.current != null) {
+      cancelAnimationFrame(resizeRafRef.current);
+    }
+
+    resizeRafRef.current = requestAnimationFrame(() => {
+      if (typeof nextWidth === 'number') {
+        setPanelWidth(nextWidth);
+      }
+      if (typeof nextHeight === 'number') {
+        setPanelHeight(nextHeight);
+      }
+      resizeRafRef.current = null;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isResizingPanel) return undefined;
+
+    const handleMouseMove = (event) => {
+      const viewportWidth = window.innerWidth;
+      const minWidth = 360;
+      const maxWidth = Math.min(980, Math.floor(viewportWidth * 0.82));
+      const nextWidth = viewportWidth - event.clientX - 16;
+      const clamped = Math.max(minWidth, Math.min(maxWidth, nextWidth));
+      queueResizeUpdate(clamped, undefined);
+    };
+
+    const stopResize = () => setIsResizingPanel(false);
+
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', stopResize);
+
+    return () => {
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', stopResize);
+      if (resizeRafRef.current != null) {
+        cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = null;
+      }
+    };
+  }, [isResizingPanel, queueResizeUpdate]);
+
+  useEffect(() => {
+    if (!isResizingPanelHeight) return undefined;
+
+    const handleMouseMove = (event) => {
+      const panelEl = panelRef.current;
+      if (!panelEl) return;
+
+      const panelRect = panelEl.getBoundingClientRect();
+      const minHeight = 420;
+      const maxHeight = 1400;
+      const nextHeight = event.clientY - panelRect.top;
+      const clamped = Math.max(minHeight, Math.min(maxHeight, nextHeight));
+      queueResizeUpdate(undefined, clamped);
+    };
+
+    const stopResize = () => setIsResizingPanelHeight(false);
+
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', stopResize);
+
+    return () => {
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', stopResize);
+      if (resizeRafRef.current != null) {
+        cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = null;
+      }
+    };
+  }, [isResizingPanelHeight, queueResizeUpdate]);
+
+  useEffect(() => {
+    if (!isResizingPanelCorner) return undefined;
+
+    const handleMouseMove = (event) => {
+      const panelEl = panelRef.current;
+      if (!panelEl) return;
+
+      const viewportWidth = window.innerWidth;
+      const widthMin = 360;
+      const widthMax = Math.min(980, Math.floor(viewportWidth * 0.82));
+      const nextWidth = viewportWidth - event.clientX - 16;
+      const clampedWidth = Math.max(widthMin, Math.min(widthMax, nextWidth));
+
+      const panelRect = panelEl.getBoundingClientRect();
+      const heightMin = 420;
+      const heightMax = 1400;
+      const nextHeight = event.clientY - panelRect.top;
+      const clampedHeight = Math.max(heightMin, Math.min(heightMax, nextHeight));
+
+      queueResizeUpdate(clampedWidth, clampedHeight);
+    };
+
+    const stopResize = () => setIsResizingPanelCorner(false);
+
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', stopResize);
+
+    return () => {
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', stopResize);
+      if (resizeRafRef.current != null) {
+        cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = null;
+      }
+    };
+  }, [isResizingPanelCorner, queueResizeUpdate]);
+
+  useEffect(() => {
+    return () => {
+      if (resizeRafRef.current != null) {
+        cancelAnimationFrame(resizeRafRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setActiveId(null);
@@ -328,7 +459,7 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
           flex: 0 0 auto;
           width: 0;
           max-width: 0;
-          height: min(var(--fg-code-panel-height), calc(100vh - 96px));
+          height: var(--fg-code-panel-height);
           overflow: hidden;
           scrollbar-width: none;
           -ms-overflow-style: none;
@@ -359,6 +490,101 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
           pointer-events: all;
           border-color: rgba(139,92,246,0.22);
           overflow: hidden;
+        }
+
+        .fg-code-panel.resizing {
+          transition: none;
+        }
+
+        .fg-resize-handle {
+          position: absolute;
+          top: 14px;
+          bottom: 14px;
+          left: -7px;
+          width: 14px;
+          cursor: col-resize;
+          border-radius: 8px;
+          z-index: 2;
+        }
+
+        .fg-resize-handle::before {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 3px;
+          height: 84px;
+          border-radius: 2px;
+          background: linear-gradient(180deg, rgba(129,140,248,0.08), rgba(167,139,250,0.55), rgba(129,140,248,0.08));
+          transition: background 0.2s ease;
+        }
+
+        .fg-resize-handle:hover::before {
+          background: linear-gradient(180deg, rgba(129,140,248,0.16), rgba(167,139,250,0.9), rgba(129,140,248,0.16));
+        }
+
+        .fg-resize-handle-bottom {
+          position: absolute;
+          left: 14px;
+          right: 14px;
+          bottom: -7px;
+          height: 14px;
+          cursor: row-resize;
+          border-radius: 8px;
+          z-index: 2;
+        }
+
+        .fg-resize-handle-bottom::before {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 84px;
+          height: 3px;
+          border-radius: 2px;
+          background: linear-gradient(90deg, rgba(129,140,248,0.08), rgba(167,139,250,0.55), rgba(129,140,248,0.08));
+          transition: background 0.2s ease;
+        }
+
+        .fg-resize-handle-bottom:hover::before {
+          background: linear-gradient(90deg, rgba(129,140,248,0.16), rgba(167,139,250,0.9), rgba(129,140,248,0.16));
+        }
+
+        .fg-resize-handle-corner {
+          position: absolute;
+          left: -9px;
+          bottom: -9px;
+          width: 18px;
+          height: 18px;
+          cursor: nesw-resize;
+          border-radius: 6px;
+          z-index: 3;
+          background: rgba(99,102,241,0.14);
+          border: 1px solid rgba(167,139,250,0.35);
+          box-shadow: 0 0 10px rgba(99,102,241,0.25);
+        }
+
+        .fg-resize-handle-corner::before,
+        .fg-resize-handle-corner::after {
+          content: '';
+          position: absolute;
+          right: 3px;
+          bottom: 3px;
+          width: 7px;
+          height: 1px;
+          background: rgba(196,181,253,0.9);
+          transform-origin: right bottom;
+        }
+
+        .fg-resize-handle-corner::before {
+          transform: rotate(-45deg) translateY(-2px);
+        }
+
+        .fg-resize-handle-corner::after {
+          transform: rotate(-45deg) translateY(1px);
+          opacity: 0.7;
         }
 
         .fg-empty {
@@ -410,10 +636,28 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
             display: block;
             pointer-events: all;
           }
+
+          .fg-resize-handle {
+            display: none;
+          }
+
+          .fg-resize-handle-bottom {
+            display: none;
+          }
+
+          .fg-resize-handle-corner {
+            display: none;
+          }
         }
       `}</style>
 
-      <div className={`fg-shell ${hasActive ? 'has-active' : ''}`}>
+      <div
+        className={`fg-shell ${hasActive ? 'has-active' : ''}`}
+        style={{
+          '--fg-code-panel-width': `${panelWidth}px`,
+          '--fg-code-panel-height': `${panelHeight}px`
+        }}
+      >
 
         {/* GRAPH */}
         <div className={`fg-graph-panel ${hasActive ? 'has-active' : ''}`}>
@@ -474,7 +718,22 @@ export default function FlowGraph({ flowData, direction = 'forward', maxSteps = 
         </div>
 
         {/* CODE PANEL */}
-        <div className={`fg-code-panel ${hasActive ? 'has-active' : ''}`}>
+        <div
+          ref={panelRef}
+          className={`fg-code-panel ${hasActive ? 'has-active' : ''} ${(isResizingPanel || isResizingPanelHeight || isResizingPanelCorner) ? 'resizing' : ''}`}
+        >
+          <div
+            className="fg-resize-handle"
+            onMouseDown={() => setIsResizingPanel(true)}
+          />
+          <div
+            className="fg-resize-handle-bottom"
+            onMouseDown={() => setIsResizingPanelHeight(true)}
+          />
+          <div
+            className="fg-resize-handle-corner"
+            onMouseDown={() => setIsResizingPanelCorner(true)}
+          />
           {activeNode
             ? <CodePanel node={activeNode} onClose={() => setActiveId(null)} />
             : <div className="fg-empty" />

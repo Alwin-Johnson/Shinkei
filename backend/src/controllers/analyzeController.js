@@ -5,37 +5,68 @@ const dynamicStore = require("../services/dynamicStore");
 const { resetRealtimeState } = require("./telemetryController");
 
 function isValidGithubRepoUrl(rawUrl) {
+    return Boolean(parseGithubRepoUrl(rawUrl));
+}
+
+function parseGithubRepoUrl(rawUrl) {
     if (!rawUrl || typeof rawUrl !== "string") {
-        return false;
+        return null;
     }
 
     const trimmed = rawUrl.trim();
     if (!trimmed) {
-        return false;
+        return null;
     }
 
-    const normalized = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    let pathPart = "";
+    const sshMatch = trimmed.match(/^git@github\.com:(.+)$/i);
 
-    try {
-        const parsed = new URL(normalized);
-        const hostname = parsed.hostname.toLowerCase();
-        if (hostname !== "github.com" && hostname !== "www.github.com") {
-            return false;
+    if (sshMatch) {
+        pathPart = sshMatch[1];
+    } else if (/^https?:\/\//i.test(trimmed)) {
+        try {
+            const parsed = new URL(trimmed);
+            const hostname = parsed.hostname.toLowerCase();
+            if (hostname !== "github.com" && hostname !== "www.github.com") {
+                return null;
+            }
+            pathPart = parsed.pathname;
+        } catch (e) {
+            return null;
         }
-
-        const segments = parsed.pathname.split("/").filter(Boolean);
-        if (segments.length < 2) {
-            return false;
+    } else {
+        const withoutWww = trimmed.replace(/^www\./i, "");
+        if (withoutWww.toLowerCase().startsWith("github.com/")) {
+            pathPart = withoutWww.slice("github.com/".length);
+        } else {
+            return null;
         }
-
-        const owner = segments[0];
-        const repo = segments[1].replace(/\.git$/i, "");
-        const segmentPattern = /^[A-Za-z0-9_.-]+$/;
-
-        return Boolean(owner && repo && segmentPattern.test(owner) && segmentPattern.test(repo));
-    } catch (e) {
-        return false;
     }
+
+    const cleanPath = pathPart.split(/[?#]/)[0];
+    const segments = cleanPath.split("/").filter(Boolean);
+    if (segments.length < 2) {
+        return null;
+    }
+
+    const owner = segments[0];
+    const repo = segments[1].replace(/\.git$/i, "");
+    const segmentPattern = /^[A-Za-z0-9_.-]+$/;
+
+    if (!owner || !repo || !segmentPattern.test(owner) || !segmentPattern.test(repo)) {
+        return null;
+    }
+
+    return { owner, repo };
+}
+
+function normalizeGithubRepoUrl(rawUrl) {
+    const parsed = parseGithubRepoUrl(rawUrl);
+    if (!parsed) {
+        return null;
+    }
+
+    return `https://github.com/${parsed.owner}/${parsed.repo}`;
 }
 
 exports.analyzeRepo = async (req, res) => {
@@ -56,16 +87,18 @@ exports.analyzeRepo = async (req, res) => {
             });
         }
 
+        const normalizedRepoUrl = normalizeGithubRepoUrl(repoUrl);
+
         const directionSafe = direction === "backward" ? "backward" : "forward";
         const depthSafe = (depth && Number.isInteger(Number(depth)) && Number(depth) > 0)
             ? Number(depth)
             : 8;
 
-        console.log(`🔍 Starting analysis for: ${repoUrl}`);
+        console.log(`🔍 Starting analysis for: ${normalizedRepoUrl}`);
         
         // 🟢 UPDATE: Only run dynamic tracing if we are in Real-time mode (no entryFunction)
         const isRealtimeMode = !entryFunction;
-        const repoPath = await fetchRepoAsZip(repoUrl, isRealtimeMode, options); 
+        const repoPath = await fetchRepoAsZip(normalizedRepoUrl, isRealtimeMode, options); 
         
         // 1. BUILD STEP (Static AST Indexing)
         await index.build(repoPath);

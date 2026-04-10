@@ -1,5 +1,9 @@
 const https = require("https");
 
+function _sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
  * explain_service.js
  * LLM LAYER — sends function code to Gemini 2.5 Flash, returns structured explanation.
@@ -95,7 +99,11 @@ function _callGemini(prompt) {
                     // Gemini error response
                     if (parsed.error) {
                         console.error("[explain_service] Gemini error:", parsed.error.message);
-                        return resolve(null);
+                        return resolve({
+                            text: null,
+                            status: res.statusCode,
+                            errorMessage: parsed.error.message || "Gemini request failed",
+                        });
                     }
 
                     const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
@@ -105,7 +113,7 @@ function _callGemini(prompt) {
                     } else {
                         console.log("[explain_service] extracted text (first 150 chars):", text.slice(0, 150));
                     }
-                    resolve(text);
+                    resolve({ text, status: res.statusCode, errorMessage: null });
                 } catch (e) {
                     console.error("[explain_service] JSON parse failed, raw:", raw.slice(0, 300));
                     reject(new Error("Failed to parse Gemini response"));
@@ -157,7 +165,7 @@ Question: ${question}`;
 
 // ─── Fallback ─────────────────────────────────────────────────────────────────
 const FALLBACK = {
-    explanation: "Explanation unavailable",
+    explanation: "Summary unavailable right now. Please try again in a moment.",
     steps:   [],
 };
 
@@ -184,7 +192,39 @@ async function explainFunction(label, code) {
 
     try {
         const prompt  = _ExplainPrompt(label, code);
-        const text    = await _callGemini(prompt);
+        let text = null;
+        let lastErrorMessage = null;
+        const retryDelays = [0, 700, 1500];
+
+        for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+            if (retryDelays[attempt] > 0) {
+                await _sleep(retryDelays[attempt]);
+            }
+
+            const response = await _callGemini(prompt);
+            text = response?.text ?? null;
+            lastErrorMessage = response?.errorMessage ?? null;
+
+            if (text) {
+                break;
+            }
+
+            const status = response?.status;
+            const isRetryable = status === 429 || status === 503;
+            if (!isRetryable) {
+                break;
+            }
+        }
+
+        if (!text && lastErrorMessage) {
+            const fallback = {
+                explanation: `Summary unavailable right now: ${lastErrorMessage}`,
+                steps: [],
+            };
+            cache.set(key, fallback);
+            return fallback;
+        }
+
         const parsed  = _parseResponse(text);
         const result  = parsed ?? FALLBACK;
 
@@ -213,10 +253,12 @@ async function askGemini(label, code, question) {
 
     try {
         const prompt  = _AskPrompt(label, code, question);
-        const text    = await _callGemini(prompt);
+        const response = await _callGemini(prompt);
+        const text = response?.text ?? null;
+        const errorMessage = response?.errorMessage ?? null;
 
         // Return plain text directly, wrapped in answer field
-        const result = { answer: text || "Could not generate an answer" };
+        const result = { answer: text || errorMessage || "Could not generate an answer" };
 
         cache.set(key, result);
         return result;

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Sparkles, Send, ArrowRight } from 'lucide-react';
 
-export default function SummaryView({ summary, typing, accentColor }) {
+export default function SummaryView({ summary, typing, accentColor, code, label }) {
   const [chatText, setChatText] = useState('');
   const [chatFocused, setChatFocused] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [isAsking, setIsAsking] = useState(false);
   
   const ac = accentColor || '#8B7FE8';
   
@@ -18,9 +20,48 @@ export default function SummaryView({ summary, typing, accentColor }) {
   const displayText = (typing && typing.length > 0) ? typing : purposeText;
   const isStillTyping = typing != null && typing.length < purposeText.length;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    const question = chatText.trim();
+    if (!question || isAsking) {
+      return;
+    }
+
+    setMessages(prev => [...prev, { role: 'user', text: question }]);
     setChatText('');
+
+    if (!code || !label) {
+      setMessages(prev => [...prev, { role: 'assistant', text: 'Cannot answer without code context.' }]);
+      return;
+    }
+
+    setIsAsking(true);
+    try {
+      const res = await fetch(`http://${window.location.hostname}:5000/api/ask-gemini`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, label, question }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Failed to get response');
+      }
+
+      const answerText = typeof data.answer === 'string'
+        ? data.answer
+        : typeof data.answer?.answer === 'string'
+          ? data.answer.answer
+          : typeof data.answer?.answer?.text === 'string'
+            ? data.answer.answer.text
+          : 'No response received.';
+
+      setMessages(prev => [...prev, { role: 'assistant', text: answerText }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', text: err.message || 'Failed to get response.' }]);
+    } finally {
+      setIsAsking(false);
+    }
   };
 
   return (
@@ -217,6 +258,38 @@ export default function SummaryView({ summary, typing, accentColor }) {
         </div>
       )}
 
+      {/* ── Q/A Thread ── */}
+      {messages.length > 0 && (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          marginTop: 4,
+        }}>
+          {messages.map((m, i) => (
+            <div
+              key={`${m.role}-${i}`}
+              style={{
+                alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                maxWidth: '92%',
+                fontSize: 12,
+                lineHeight: 1.6,
+                padding: '8px 10px',
+                borderRadius: 10,
+                fontFamily: "'Inter', sans-serif",
+                color: m.role === 'user' ? '#e2e8f0' : '#cbd5e1',
+                background: m.role === 'user' ? 'rgba(99,102,241,0.22)' : 'rgba(30,41,59,0.6)',
+                border: m.role === 'user' ? '1px solid rgba(129,140,248,0.35)' : '1px solid rgba(148,163,184,0.2)',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {m.text}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ── Chat ── */}
       <form
         onSubmit={handleSubmit}
@@ -260,28 +333,28 @@ export default function SummaryView({ summary, typing, accentColor }) {
         <button
           type="submit"
           aria-label="Send message"
-          disabled={!chatText.trim()}
+          disabled={!chatText.trim() || isAsking}
           style={{
             width: 38,
             height: 38,
             borderRadius: 12,
-            border: `1px solid ${chatText.trim() ? 'rgba(139,92,246,0.3)' : 'rgba(51,65,85,0.3)'}`,
-            background: chatText.trim() ? 'rgba(139,92,246,0.15)' : 'rgba(51,65,85,0.25)',
-            color: chatText.trim() ? '#c4b5fd' : '#64748b',
+            border: `1px solid ${chatText.trim() && !isAsking ? 'rgba(139,92,246,0.3)' : 'rgba(51,65,85,0.3)'}`,
+            background: chatText.trim() && !isAsking ? 'rgba(139,92,246,0.15)' : 'rgba(51,65,85,0.25)',
+            color: chatText.trim() && !isAsking ? '#c4b5fd' : '#64748b',
             display: 'grid',
             placeItems: 'center',
-            cursor: chatText.trim() ? 'pointer' : 'not-allowed',
+            cursor: chatText.trim() && !isAsking ? 'pointer' : 'not-allowed',
             transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
             flexShrink: 0,
           }}
           onMouseEnter={e => {
-            if (chatText.trim()) {
+            if (chatText.trim() && !isAsking) {
               e.currentTarget.style.background = 'rgba(139,92,246,0.25)';
               e.currentTarget.style.transform = 'scale(1.05)';
             }
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.background = chatText.trim() ? 'rgba(139,92,246,0.15)' : 'rgba(51,65,85,0.25)';
+            e.currentTarget.style.background = chatText.trim() && !isAsking ? 'rgba(139,92,246,0.15)' : 'rgba(51,65,85,0.25)';
             e.currentTarget.style.transform = 'scale(1)';
           }}
         >

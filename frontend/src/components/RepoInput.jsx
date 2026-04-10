@@ -2,33 +2,64 @@ import { useState } from 'react';
 import { Link2, Code2, ArrowRight, Loader2, ChevronRight } from 'lucide-react';
 
 function isValidGithubRepoUrl(rawUrl) {
+  return Boolean(parseGithubRepoUrl(rawUrl));
+}
+
+function parseGithubRepoUrl(rawUrl) {
   const trimmed = rawUrl.trim();
   if (!trimmed) {
-    return false;
+    return null;
   }
 
-  const normalized = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  let pathPart = '';
+  const sshMatch = trimmed.match(/^git@github\.com:(.+)$/i);
 
-  try {
-    const parsed = new URL(normalized);
-    const hostname = parsed.hostname.toLowerCase();
-    if (hostname !== 'github.com' && hostname !== 'www.github.com') {
-      return false;
+  if (sshMatch) {
+    pathPart = sshMatch[1];
+  } else if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      const hostname = parsed.hostname.toLowerCase();
+      if (hostname !== 'github.com' && hostname !== 'www.github.com') {
+        return null;
+      }
+      pathPart = parsed.pathname;
+    } catch {
+      return null;
     }
-
-    const segments = parsed.pathname.split('/').filter(Boolean);
-    if (segments.length < 2) {
-      return false;
+  } else {
+    const withoutWww = trimmed.replace(/^www\./i, '');
+    if (withoutWww.toLowerCase().startsWith('github.com/')) {
+      pathPart = withoutWww.slice('github.com/'.length);
+    } else {
+      return null;
     }
-
-    const owner = segments[0];
-    const repo = segments[1].replace(/\.git$/i, '');
-    const segmentPattern = /^[A-Za-z0-9_.-]+$/;
-
-    return Boolean(owner && repo && segmentPattern.test(owner) && segmentPattern.test(repo));
-  } catch {
-    return false;
   }
+
+  const cleanPath = pathPart.split(/[?#]/)[0];
+  const segments = cleanPath.split('/').filter(Boolean);
+  if (segments.length < 2) {
+    return null;
+  }
+
+  const owner = segments[0];
+  const repo = segments[1].replace(/\.git$/i, '');
+  const segmentPattern = /^[A-Za-z0-9_.-]+$/;
+
+  if (!owner || !repo || !segmentPattern.test(owner) || !segmentPattern.test(repo)) {
+    return null;
+  }
+
+  return { owner, repo };
+}
+
+function normalizeGithubRepoUrl(rawUrl) {
+  const parsed = parseGithubRepoUrl(rawUrl);
+  if (!parsed) {
+    return null;
+  }
+
+  return `https://github.com/${parsed.owner}/${parsed.repo}`;
 }
 
 // ── Animated step pipeline shown during loading ──
@@ -132,7 +163,8 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
       backendPort: 8000
     } : null;
 
-    const result = await onAnalyze(url, isRealtime ? null : fnText, finalDirection, stepsNum, options);
+    const normalizedUrl = normalizeGithubRepoUrl(url) || url;
+    const result = await onAnalyze(normalizedUrl, isRealtime ? null : fnText, finalDirection, stepsNum, options);
     if (result && !result.success) {
       setError(result.error || 'Analysis failed.');
     }

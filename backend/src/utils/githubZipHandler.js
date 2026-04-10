@@ -43,7 +43,38 @@ function getZipUrl(url) {
         return `https://bitbucket.org/${owner}/${repo}/get/master.zip`;
     }
 
-    return `https://github.com/${owner}/${repo}/zipball/master`;
+    return `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/main`;
+}
+
+async function resolveZipUrl(url) {
+    const { hostname, owner, repo } = parseRepoUrl(url);
+
+    if (hostname.includes('gitlab.com') || hostname.includes('bitbucket.org')) {
+        return getZipUrl(url);
+    }
+
+    try {
+        const repoMeta = await axios.get(`https://api.github.com/repos/${owner}/${repo}`, {
+            headers: {
+                Accept: 'application/vnd.github+json',
+                'User-Agent': 'shinkei-repo-fetcher'
+            }
+        });
+
+        const defaultBranch = repoMeta?.data?.default_branch || 'main';
+        return `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/${defaultBranch}`;
+    } catch (err) {
+        const status = err?.response?.status;
+        if (status === 404) {
+            throw new Error("Repository not found on GitHub. Verify owner/repo and try again.");
+        }
+        if (status === 401 || status === 403) {
+            throw new Error("Repository exists but metadata is not accessible (private or rate-limited).");
+        }
+
+        // Fallback for transient GitHub API issues
+        return `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/main`;
+    }
 }
 
 async function downloadZip(url, dest) {
@@ -72,7 +103,8 @@ async function fetchRepoAsZip(repoUrl, runDynamic = false, options = {}) {
     const zipPath = path.join(TEMP_DIR, `${repo}-${uniqueId}.zip`);
 
     try {
-        await downloadZip(getZipUrl(repoUrl), zipPath);
+        const zipUrl = await resolveZipUrl(repoUrl);
+        await downloadZip(zipUrl, zipPath);
     } catch (err) {
         const status = err?.response?.status;
         if (status === 404) {

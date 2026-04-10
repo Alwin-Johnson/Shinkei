@@ -24,7 +24,7 @@ export default function CodePanel({ node, onClose }) {
     setShowSummary(false);
     setSummarising(false);
     setSummary(null);
-  }, [node.label]);
+  }, [node.id, node.label]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -33,12 +33,32 @@ export default function CodePanel({ node, onClose }) {
   };
 
   const handleSummarise = async () => {
+    if (summarising) {
+      return;
+    }
+
     if (showSummary) {
       setShowSummary(false);
       setSummarising(false);
       return;
     }
-    if (!node.code) return;
+
+    if (!node.code || !node.code.trim()) {
+      setSummary({
+        purpose: 'No source code is available for this node, so summary could not be generated.',
+        details: [],
+        calls: [],
+      });
+      setShowSummary(true);
+      return;
+    }
+
+    setSummary({
+      purpose: 'Generating summary…',
+      details: [],
+      calls: [],
+    });
+    setShowSummary(true);
     setSummarising(true);
     try {
       const res = await fetch(`http://${window.location.hostname}:5000/api/explain-function`, {
@@ -46,33 +66,47 @@ export default function CodePanel({ node, onClose }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: node.code, label: node.label }),
       });
+
       const data = await res.json();
-      if (data.success) {
-        // Handle different response shapes — API may return explanation as string or object
-        const explanation = data.explanation;
-        const purposeText = typeof explanation === 'string'
-          ? explanation
-          : typeof explanation?.explanation === 'string'
-            ? explanation.explanation
-            : typeof explanation?.purpose === 'string'
-              ? explanation.purpose
-              : JSON.stringify(explanation);
 
-        const steps = Array.isArray(explanation?.steps)
-          ? explanation.steps
-          : Array.isArray(explanation?.details)
-            ? explanation.details
-            : [];
-
+      if (!res.ok || !data?.success) {
         setSummary({
-          purpose: purposeText,
-          details: steps,
-          calls: Array.isArray(explanation?.calls) ? explanation.calls : [],
+          purpose: data?.error || 'Failed to generate summary for this node.',
+          details: [],
+          calls: [],
         });
         setShowSummary(true);
+        return;
       }
+
+      // Handle different response shapes — API may return explanation as string or object
+      const explanation = data.explanation;
+      const purposeText = typeof explanation === 'string'
+        ? explanation
+        : typeof explanation?.explanation === 'string'
+          ? explanation.explanation
+          : typeof explanation?.purpose === 'string'
+            ? explanation.purpose
+            : 'Summary unavailable.';
+
+      const steps = Array.isArray(explanation?.steps)
+        ? explanation.steps
+        : Array.isArray(explanation?.details)
+          ? explanation.details
+          : [];
+
+      setSummary({
+        purpose: purposeText,
+        details: steps,
+        calls: Array.isArray(explanation?.calls) ? explanation.calls : [],
+      });
     } catch (err) {
       console.error('Summarise failed:', err);
+      setSummary({
+        purpose: 'Unable to reach summarization service. Please try again.',
+        details: [],
+        calls: [],
+      });
     } finally {
       setSummarising(false);
     }
@@ -233,6 +267,7 @@ export default function CodePanel({ node, onClose }) {
       {/* ── Summarise action bar ── */}
       <button
         onClick={handleSummarise}
+        disabled={summarising}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -242,7 +277,7 @@ export default function CodePanel({ node, onClose }) {
           padding: showSummary ? '10px 18px' : '12px 18px',
           border: 'none',
           borderBottom: '1px solid rgba(71,85,105,0.08)',
-          cursor: 'pointer',
+          cursor: summarising ? 'wait' : 'pointer',
           flexShrink: 0,
           transition: 'all 0.3s ease',
           fontFamily: "'Inter', sans-serif",
@@ -263,6 +298,7 @@ export default function CodePanel({ node, onClose }) {
           }),
         }}
         onMouseEnter={e => {
+          if (summarising) return;
           if (!showSummary && !summarising) {
             e.currentTarget.style.background = 'linear-gradient(135deg, rgba(109,40,217,0.18) 0%, rgba(79,70,229,0.12) 100%)';
           }
@@ -272,6 +308,7 @@ export default function CodePanel({ node, onClose }) {
           }
         }}
         onMouseLeave={e => {
+          if (summarising) return;
           if (!showSummary && !summarising) {
             e.currentTarget.style.background = 'linear-gradient(135deg, rgba(109,40,217,0.1) 0%, rgba(79,70,229,0.06) 100%)';
           }
@@ -314,7 +351,13 @@ export default function CodePanel({ node, onClose }) {
 
       {/* Content area: code or summary */}
       {showSummary ? (
-        <SummaryView summary={summary} typing={typingText} accentColor={t} />
+        <SummaryView
+          summary={summary}
+          typing={typingText}
+          accentColor={t}
+          code={node.code || ''}
+          label={node.label || ''}
+        />
       ) : (
         <div style={{
           flex: 1,
@@ -343,6 +386,9 @@ export default function CodePanel({ node, onClose }) {
                   paddingLeft: 8,
                   userSelect: 'none',
                   textAlign: 'right',
+                  position: 'sticky',
+                  left: 0,
+                  zIndex: 1,
                   background: 'rgba(26,16,53,0.3)',
                   borderRight: '1px solid rgba(139,92,246,0.06)',
                   transition: 'color 0.15s',
