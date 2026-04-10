@@ -3,10 +3,11 @@ import { useState, useEffect } from 'react';
 import HeroView from './components/HeroView';
 import WorkspaceModal from './components/WorkspaceModal';
 import GraphView from './components/GraphView';
+import UIEditorView from './components/UIEditorView';
 
-// ─── View States: hero → workspace → graph ────────────────────────────
+// ─── View States: hero → workspace → graph | editor ────────────────────────────
 function App() {
-  const [view, setView] = useState('hero'); // 'hero' | 'workspace' | 'graph'
+  const [view, setView] = useState('hero'); // 'hero' | 'workspace' | 'graph' | 'editor'
   const [flow, setFlow] = useState(null);
   const [trace, setTrace] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -15,6 +16,8 @@ function App() {
   const [isAppReady, setIsAppReady] = useState(false); // 👈 Track if target app is likely open
   const [appUrl, setAppUrl] = useState(''); // 👈 New state for dynamic target URL
   const [isRealtimeSession, setIsRealtimeSession] = useState(false); // 👈 New state
+  const [isEditorSession, setIsEditorSession] = useState(false); // 👈 New state
+  const [repoRoot, setRepoRoot] = useState(''); // 👈 Store the absolute path for editor
   const [graphDirection, setGraphDirection] = useState('forward');
   const [graphSteps, setGraphSteps] = useState(10);
   const [currentAnalysisId, setCurrentAnalysisId] = useState(0); // 👈 Track request sequence
@@ -33,6 +36,7 @@ function App() {
       setLoading(false); // 👈 Ensure loading is off
       setIsWaitingForRealtime(false);
       setIsRealtimeSession(false);
+      setIsEditorSession(false);
       setIsAppReady(false);
     }, 500);
   };
@@ -49,6 +53,7 @@ function App() {
     setLoading(false); // 👈 Ensure loading is off
     setIsWaitingForRealtime(false);
     setIsRealtimeSession(false);
+    setIsEditorSession(false);
     setIsAppReady(false);
   };
 
@@ -107,15 +112,17 @@ function App() {
   setTrace(null);
   setLoading(true);
   
+  const isEditor = options?.uiEditor === true;
   const realtime = !fnText;
-  setIsWaitingForRealtime(false); // ⛔ Don't auto-arm. Wait for user to press button.
-  setIsRealtimeSession(realtime); // 👈 Persist session mode
   
-  // 🌐 Trigger auto-open countdown message if realtime
+  setIsWaitingForRealtime(false); 
+  setIsRealtimeSession(realtime); 
+  setIsEditorSession(isEditor);
+  
+  // 🌐 Trigger auto-open countdown message if realtime or editor
   if (realtime) {
     setIsAutoOpening(true);
     setIsAppReady(false);
-    // ⛔ Timeout removed: handling via SSE 'app_opened' event now
   }
 
   setGraphDirection(direction);
@@ -130,7 +137,7 @@ function App() {
         entryFunction: fnText,
         direction: direction,
         depth: steps,
-        options: options // 👈 Added frontendPort / backendPort
+        options: options
       }),
     });
 
@@ -148,24 +155,26 @@ function App() {
       setLoading(false);
       setIsWaitingForRealtime(false);
       setIsRealtimeSession(false);
+      setIsEditorSession(false);
       setIsAutoOpening(false);
       return {
         success: false,
         error: data?.error || 'Analysis failed. Please check your repository and function name.'
       };
     } else {
+      if (data.repoRoot) setRepoRoot(data.repoRoot);
+
       if (data.mode === 'static') {
         setFlow(data.flow);
         setTrace(data.trace);
         setLoading(false);
         setView('graph');
         return { success: true };
+        setView('graph');
       } else {
         // Real-time mode: we stay in loading state until the graph is pushed via SSE
         console.log('📡 Waiting for real-time interaction...');
         setLoading(false); // Main request is done, now we just wait for SSE
-        setView('graph');
-        return { success: true };
       }
     }
 
@@ -179,12 +188,16 @@ function App() {
     setLoading(false);
     setIsWaitingForRealtime(false);
     setIsRealtimeSession(false);
+    setIsEditorSession(false);
     setIsAutoOpening(false);
-    return { success: false, error: 'Unable to reach analyzer service.' };
+  } finally {
+    if (analysisId === currentAnalysisId) {
+      setView('graph');
+    }
   }
 };
 
-  // Lock body scroll when workspace/graph is open
+  // Lock body scroll when workspace/graph/editor is open
   useEffect(() => {
     if (view !== 'hero') {
       document.body.style.overflow = 'hidden';
@@ -217,9 +230,15 @@ function App() {
         isAppReady={isAppReady}
         appUrl={appUrl}
       />
+      <UIEditorView
+        isOpen={view === 'editor'}
+        appUrl={appUrl}
+        onClose={handleBackToWorkspace}
+        repoRoot={repoRoot}
+        isAppReady={isAppReady}
+      />
     </>
   );
 }
 
 export default App;
-

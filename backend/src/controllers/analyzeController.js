@@ -105,14 +105,18 @@ exports.analyzeRepo = async (req, res) => {
 
         // 2. CHECK MODE: Static or Real-time?
         if (isRealtimeMode) {
-            // 🟢 REAL-TIME MODE
-            console.log("📡 No entry function provided. Entering Real-time mode.");
-            // ⛔ Removed auto-arming: telemetryRoutes.enableRealtimeWaiting(...)
+            // 🟢 REAL-TIME / EDITOR MODE
+            console.log(`📡 Entering dynamic mode (Editor: ${!!options?.uiEditor}).`);
+            
+            // Enable telemetry waiting so we can catch the first click
+            const { enableRealtimeWaiting } = require("../services/telemetry.service");
+            enableRealtimeWaiting({ direction: directionSafe, depth: depthSafe });
 
             return res.json({
                 success: true,
                 mode: "realtime",
-                message: "Environment ready. Use 'Analyze Next Click' to start capturing."
+                repoRoot: repoPath, 
+                message: "Environment ready. Interaction monitoring active."
             });
         }
 

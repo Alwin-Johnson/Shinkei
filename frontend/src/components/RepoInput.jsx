@@ -130,7 +130,7 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
   const [steps, setSteps] = useState('10');
   const [urlError, setUrlError] = useState('');
   const [error, setError] = useState('');
-  const [isRealtime, setIsRealtime] = useState(false);
+  const [mode, setMode] = useState('static'); // 'static' | 'realtime' | 'editor'
 
   const validateUrl = (value) => {
     if (!value.trim()) {
@@ -155,19 +155,16 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
     if (!isRealtime && !fnText.trim()) { setError('Specify a function or action to trace'); return; }
     setError('');
 
-    const finalDirection = isRealtime ? 'forward' : direction;
-    const stepsNum = isRealtime ? 10 : Math.max(1, Math.min(100, Number(steps) || 10));
+    const finalDirection = mode === 'static' ? direction : 'forward';
+    const stepsNum = mode === 'static' ? Math.max(1, Math.min(100, Number(steps) || 10)) : 10;
 
-    const options = isRealtime ? {
+    const options = mode !== 'static' ? {
       frontendPort: 3000,
-      backendPort: 8000
+      backendPort: 8000,
+      uiEditor: mode === 'editor'
     } : null;
 
-    const normalizedUrl = normalizeGithubRepoUrl(url) || url;
-    const result = await onAnalyze(normalizedUrl, isRealtime ? null : fnText, finalDirection, stepsNum, options);
-    if (result && !result.success) {
-      setError(result.error || 'Analysis failed.');
-    }
+    onAnalyze(url, isRealtime ? null : fnText, finalDirection, stepsNum, options);
   };
 
   return (
@@ -183,7 +180,7 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
           letterSpacing: '-0.02em',
           lineHeight: 1.2,
         }}>
-          Configure Analysis
+          Configure Project
         </h3>
         <p style={{
           fontSize: '13px',
@@ -191,29 +188,41 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
           fontFamily: "'Inter', sans-serif",
           lineHeight: 1.6,
         }}>
-          {isRealtime
-            ? 'Connect to a running app and capture execution flows in real-time.'
-            : 'Point to any GitHub repo and specify your entry function.'}
+          {mode === 'static' 
+            ? 'Point to any GitHub repo and specify your entry function.'
+            : mode === 'realtime'
+              ? 'Connect to a running app and capture execution flows in real-time.'
+              : 'Launch a project in interactive mode to edit UI components visually.'}
         </p>
       </div>
 
       {/* Mode Toggle */}
       <div style={{ marginBottom: 18 }}>
         <label className="field-label">Mode</label>
-        <div className="direction-toggle">
+        <div className="direction-toggle" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', padding: '4px' }}>
           <button
             type="button"
-            className={`direction-option ${!isRealtime ? 'active' : ''}`}
-            onClick={() => setIsRealtime(false)}
+            className={`direction-option ${mode === 'static' ? 'active' : ''}`}
+            onClick={() => setMode('static')}
+            style={{ fontSize: '11px', padding: '6px 2px' }}
           >
-            Static Analysis
+            Static
           </button>
           <button
             type="button"
-            className={`direction-option ${isRealtime ? 'active' : ''}`}
-            onClick={() => setIsRealtime(true)}
+            className={`direction-option ${mode === 'realtime' ? 'active' : ''}`}
+            onClick={() => setMode('realtime')}
+            style={{ fontSize: '11px', padding: '6px 2px' }}
           >
             Live Trace
+          </button>
+          <button
+            type="button"
+            className={`direction-option ${mode === 'editor' ? 'active' : ''}`}
+            onClick={() => setMode('editor')}
+            style={{ fontSize: '11px', padding: '6px 2px' }}
+          >
+            UI Editor
           </button>
         </div>
       </div>
@@ -269,7 +278,7 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
       )}
 
       {/* Static-only Fields */}
-      {!isRealtime && (
+      {mode === 'static' && (
         <>
           <label className="field-label" style={{ marginTop: 14 }}>
             Entry Point
@@ -385,7 +394,7 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
           </span>
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
-            {isRealtime ? 'Start Live Session' : 'Trace Execution'}
+            {mode === 'static' ? 'Trace Execution' : mode === 'realtime' ? 'Start Live Session' : 'Launch UI Editor'}
             <ArrowRight style={{ width: 15, height: 15, opacity: 0.8 }} />
           </span>
         )}

@@ -2,6 +2,11 @@ const dynamicStore = require('../services/dynamicStore');
 const sseService = require('../services/sseService');
 const { analyzeFunction } = require('../services/queryEngine');
 
+// ─── 📡 STATE FOR REAL-TIME ROOT DETECTION ────────────────────────────
+let waitingForRealtimeRoot = false;
+let lastIgnoredTraceId = null;
+let realtimeAnalysisOptions = { direction: 'forward', depth: 8 };
+
 // ─── 📡 ROUTES ────────────────────────────────────────────────────────
 
 const enableRealtimeWaiting = (options = {}) => {

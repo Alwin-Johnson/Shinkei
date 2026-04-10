@@ -1,3 +1,5 @@
+// backend/utils/dynamicLauncher.js
+
 const fs = require("fs-extra");
 const path = require("path");
 const net = require("net");
@@ -6,7 +8,7 @@ const { execSync, exec } = require("child_process");
 const { index } = require("../services/indexBuilder"); 
 const sseService = require("../services/sseService"); 
 const { TRACING_CODE, REQUIRE_HOOK_CODE } = require("./tracingTemplates");
-const { BABEL_PLUGIN_CODE, CLIENT_SCRIPT_CODE } = require("./domTemplates"); // 👈 Your new templates safely imported here
+const { BABEL_PLUGIN_CODE, CLIENT_SCRIPT_CODE } = require("./domTemplates");
 
 let activeProcesses = [];
 
@@ -23,7 +25,6 @@ function findFreePort(startPort) {
 
 async function stopActiveProcesses() {
     if (activeProcesses.length === 0) return;
-    
     console.log(`🛑 Stopping ${activeProcesses.length} active processes...`);
     for (const proc of activeProcesses) {
         if (proc && !proc.killed) {
@@ -33,11 +34,10 @@ async function stopActiveProcesses() {
                 } else {
                     proc.kill('SIGTERM');
                 }
-            } catch (e) { } // Ignore if already dead
+            } catch (e) { }
         }
     }
     activeProcesses = [];
-    console.log("✅ All target processes stopped.");
 }
 
 async function getEntryPoint(repoRoot) {
@@ -87,9 +87,72 @@ async function launchFrontend(repoRoot, options = {}) {
 
     if (!frontendPath) return null;
 
-    if (!fs.existsSync(path.join(frontendPath, 'node_modules'))) {
-        console.log(`📦 [Shinkei] Installing dependencies in ${frontendPath}...`);
-        execSync('npm install --no-audit --no-fund', { cwd: frontendPath, stdio: 'inherit' });
+    const pkgPath = path.join(frontendPath, 'package.json');
+    if (await fs.pathExists(pkgPath)) {
+        let pkg = await fs.readJson(pkgPath);
+        let changed = false;
+
+        // --- 🟢 VITE: SWC to Babel conversion ---
+        if (pkg.devDependencies?.["@vitejs/plugin-react-swc"] || pkg.dependencies?.["@vitejs/plugin-react-swc"]) {
+            console.log("⚠️ [Shinkei] SWC detected. Converting to Babel for inspector support...");
+            if (pkg.devDependencies) delete pkg.devDependencies["@vitejs/plugin-react-swc"];
+            if (pkg.dependencies) delete pkg.dependencies["@vitejs/plugin-react-swc"];
+            pkg.devDependencies["@vitejs/plugin-react"] = "^4.0.0";
+            changed = true;
+        }
+
+        // --- 🔵 CRA: Webpack Hijacking via react-app-rewired ---
+        const hasReactScripts = pkg.dependencies?.["react-scripts"] || pkg.devDependencies?.["react-scripts"];
+        if (hasReactScripts) {
+            console.log("⚠️ [Shinkei] Create React App detected. Hijacking Webpack...");
+            
+            // Rewrite scripts to use rewired
+            if (pkg.scripts?.start && pkg.scripts.start.includes("react-scripts")) {
+                pkg.scripts.start = pkg.scripts.start.replace("react-scripts", "react-app-rewired");
+                startCommand = 'npm start'; // Ensure we use the patched script
+            }
+            
+            // Add required dependencies
+            pkg.devDependencies = pkg.devDependencies || {};
+            pkg.devDependencies["react-app-rewired"] = "^2.2.1";
+            pkg.devDependencies["customize-cra"] = "^1.0.0";
+            changed = true;
+
+            // Generate config-overrides.js
+            const absolutePluginPath = path.join(repoRoot, "shinkei-babel-plugin.js").replace(/\\/g, '/');
+            const overrideCode = `
+const { override, addBabelPlugin } = require('customize-cra');
+module.exports = override(
+    addBabelPlugin('${absolutePluginPath}')
+);
+`;
+            await fs.writeFile(path.join(frontendPath, 'config-overrides.js'), overrideCode.trim());
+            console.log("🛠️  [Shinkei] Generated config-overrides.js for CRA.");
+        }
+
+        // Install dependencies if package.json was modified
+        if (changed || !fs.existsSync(path.join(frontendPath, 'node_modules'))) {
+            await fs.writeJson(pkgPath, pkg, { spaces: 2 });
+            console.log("📦 [Shinkei] Installing modified dependencies...");
+            try {
+                execSync('npm install --no-audit --no-fund', { cwd: frontendPath, stdio: 'inherit' });
+            } catch (e) {
+                console.error("❌ [Shinkei] Dependency installation failed:", e.message);
+            }
+        }
+    }
+
+    // --- 🧹 CLEAR CACHES ---
+    const viteCachePath = path.join(frontendPath, 'node_modules', '.vite');
+    const craCachePath = path.join(frontendPath, 'node_modules', '.cache');
+    
+    if (fs.existsSync(viteCachePath)) {
+        console.log("🧹 [Shinkei] Clearing Vite cache to force Babel rebuild...");
+        fs.rmSync(viteCachePath, { recursive: true, force: true });
+    }
+    if (fs.existsSync(craCachePath)) {
+        console.log("🧹 [Shinkei] Clearing Webpack cache to force Babel rebuild...");
+        fs.rmSync(craCachePath, { recursive: true, force: true });
     }
 
     let finalCommand = startCommand.startsWith('npm') ? `${startCommand} -- --port ${FE_PORT}` : startCommand;
@@ -99,39 +162,31 @@ async function launchFrontend(repoRoot, options = {}) {
       (function() {
         const BE_PORT = '${BE_PORT}';
         const BACKEND_URL = 'http://' + window.location.hostname + ':' + BE_PORT;
-        console.log('💉 [Shinkei] Interceptor Active: Routing API traffic to ' + BACKEND_URL);
-
-        const rewrite = (url) => {
-          if (typeof url === 'string' && (url.startsWith('/api') || url.startsWith('api/'))) {
-             const normalized = url.startsWith('/') ? url : '/' + url;
-             return BACKEND_URL + normalized;
-          }
-          return url;
-        };
-
+        console.log('💉 [Shinkei] Interceptor Active');
         const origFetch = window.fetch;
-        window.fetch = (url, init) => origFetch(rewrite(url), init);
-        const origOpen = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function(m, url) {
-          return origOpen.apply(this, [m, rewrite(url), ...Array.from(arguments).slice(2)]);
+        window.fetch = (url, init) => {
+          if (typeof url === 'string' && (url.startsWith('/api') || url.startsWith('api/'))) {
+             return origFetch(BACKEND_URL + (url.startsWith('/') ? url : '/' + url), init);
+          }
+          return origFetch(url, init);
         };
       })();
-    </script>`;
+    </script>
+    <script>${CLIENT_SCRIPT_CODE}</script>`;
 
     const htmlFiles = [
-        path.join(frontendPath, 'public', 'index.html'),
         path.join(frontendPath, 'index.html'),
+        path.join(frontendPath, 'public', 'index.html'),
         path.join(frontendPath, 'src', 'index.html')
     ];
 
     for (const file of htmlFiles) {
         if (fs.existsSync(file)) {
             let content = fs.readFileSync(file, 'utf8');
-            if (!content.includes('BACKEND_URL')) {
-                content = content.replace('</head>', interceptorScript + '</head>');
-                fs.writeFileSync(file, content);
-                console.log("[Shinkei] ✅ Injected Network Interceptor into " + path.basename(file));
-            }
+            content = content.replace(/<script>.*?\[Shinkei\].*?<\/script>/gs, '');
+            content = content.replace('</head>', interceptorScript + '</head>');
+            fs.writeFileSync(file, content);
+            console.log("[Shinkei] ✅ Injected Inspector into " + path.basename(file));
         }
     }
 
@@ -139,19 +194,21 @@ async function launchFrontend(repoRoot, options = {}) {
     const child = exec(finalCommand, {
         cwd: frontendPath,
         env: { 
-            ...process.env, PORT: FE_PORT, BROWSER: 'none', 
-            REACT_APP_API_URL: `http://localhost:${BE_PORT}`, VITE_API_URL: `http://localhost:${BE_PORT}`
+            ...process.env, PORT: FE_PORT, BROWSER: 'none',
+            REACT_APP_API_URL: `http://localhost:${BE_PORT}`,
+            VITE_API_URL: `http://localhost:${BE_PORT}`
         }
     });
+
+    child.stdout.on('data', (data) => console.log(`[Target Frontend]: ${data.trim()}`));
+    child.stderr.on('data', (data) => console.error(`[Target Frontend Error]: ${data.trim()}`));
 
     const openCommand = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
     setTimeout(() => {
         console.log(`🌐 Opening target app at http://localhost:${FE_PORT}...`);
-        exec(`${openCommand} http://localhost:${FE_PORT}`);
         sseService.broadcast({ type: 'app_opened', url: `http://localhost:${FE_PORT}` });
     }, 3000);
 
-    child.stdout.on('data', (data) => console.log(`[Target Frontend]: ${data.trim()}`));
     return child;
 }
 
@@ -169,41 +226,48 @@ async function runDynamicEnvironment(repoRoot, options = {}) {
         await fs.writeFile(path.join(repoRoot, "tracing.js"), TRACING_CODE);
         await fs.writeFile(path.join(repoRoot, "requireHook.js"), REQUIRE_HOOK_CODE);
 
-        // --- 2. INJECT SHINKEI DOM TRACKERS ---
-        // Drop the Babel plugin into their root folder
-        await fs.writeFile(path.join(repoRoot, "shinkei-babel-plugin.js"), BABEL_PLUGIN_CODE);
-        
-        // Drop the Client Script into their public/ folder so their index.html can load it
-        const publicDir = path.join(repoRoot, "public");
-        if (await fs.pathExists(publicDir)) {
-            await fs.writeFile(path.join(publicDir, "shinkei-client.js"), CLIENT_SCRIPT_CODE);
-            console.log("✅ [Shinkei] Injected Client Script into public folder.");
-        }
+        // --- 2. PREPARE BABEL CONFIG ---
+        const babelPluginPath = path.join(repoRoot, "shinkei-babel-plugin.js").replace(/\\/g, '/');
+        await fs.writeFile(babelPluginPath, BABEL_PLUGIN_CODE);
+        const babelConfig = { plugins: ["./shinkei-babel-plugin.js"] };
+        await fs.writeJson(path.join(repoRoot, "babel.config.json"), babelConfig);
+        await fs.writeJson(path.join(repoRoot, ".babelrc"), babelConfig);
 
-        // --- 3. BUILD AST MAP ---
-        const astMap = {};
-        for (const [relativePath, data] of index.files.entries()) {
-            if (data.functions) {
-                data.functions.forEach(fn => {
-                    const isAnon = !fn.name || fn.name.includes('anonymous');
-                    if (!isAnon) {
-                        astMap[relativePath + ":" + fn.name] = { file: relativePath, line: fn.startLine, name: fn.name };
+        // --- 3. PATCH VITE CONFIG ---
+        const vitePaths = [
+            path.join(repoRoot, "vite.config.js"), 
+            path.join(repoRoot, "vite.config.ts"),
+            path.join(repoRoot, "frontend", "vite.config.js"),
+            path.join(repoRoot, "frontend", "vite.config.ts"),
+            path.join(repoRoot, "client", "vite.config.js"),
+            path.join(repoRoot, "client", "vite.config.ts")
+        ];
+        
+        for (const vp of vitePaths) {
+            if (await fs.pathExists(vp)) {
+                let vCode = await fs.readFile(vp, "utf8");
+                console.log(`🛠️  [Shinkei] Patching Vite configuration at ${vp}`);
+                
+                vCode = vCode.replace(/@vitejs\/plugin-react-swc/g, "@vitejs/plugin-react");
+                
+                if (!vCode.includes("shinkei-babel-plugin")) {
+                    if (vCode.match(/react\(\s*\)/)) {
+                        vCode = vCode.replace(/react\(\s*\)/, `react({ babel: { plugins: ['${babelPluginPath}'] } })`);
+                    } else if (vCode.match(/react\(/)) {
+                        vCode = vCode.replace(/react\(([^)]+)\)/, `react({ ...$1, babel: { plugins: ['${babelPluginPath}'] } })`);
                     }
-                });
+                }
+                await fs.writeFile(vp, vCode);
             }
         }
-        await fs.writeJson(path.join(repoRoot, "ast_map.json"), astMap);
 
         // --- 4. LAUNCH BACKEND ---
-        const globalNodeModules = execSync('npm root -g').toString().trim();
         const entryFile = await getEntryPoint(repoRoot);
-
         console.log(`🚀 Launching Backend (${entryFile}) on PORT ${BE_PORT}...`);
         const backendProcess = exec(`node --require ./tracing.js --require ./requireHook.js ${entryFile}`, { 
             cwd: repoRoot,
-            env: { ...process.env, NODE_PATH: globalNodeModules, PORT: BE_PORT, SHINKEI_REPO_ROOT: repoRoot }
+            env: { ...process.env, PORT: BE_PORT, SHINKEI_REPO_ROOT: repoRoot }
         });
-
         activeProcesses.push(backendProcess); 
         backendProcess.stdout.on('data', (data) => console.log(`[Target Backend]: ${data.trim()}`));
 
