@@ -83,22 +83,34 @@ export default function UIEditorView({
   };
 
   const handleFileSelect = async (filePath, lineNum) => {
+    const parsedLine = Number.parseInt(lineNum, 10);
+    const hasValidLine = Number.isFinite(parsedLine) && parsedLine > 0;
     setLoading(true);
     setSelectedFile(filePath);
-    setLine(lineNum);
+    setLine(hasValidLine ? parsedLine : null);
     try {
       // 🎯 Request specific line to get design snippet
-      const url = `http://${window.location.hostname}:5000/api/editor/read?file=${encodeURIComponent(filePath)}${isDesignMode ? `&line=${lineNum}` : ''}`;
+      const url = `http://${window.location.hostname}:5000/api/editor/read?file=${encodeURIComponent(filePath)}${isDesignMode && hasValidLine ? `&line=${parsedLine}` : ''}`;
       const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Read failed with status ${res.status}`);
+      }
       const data = await res.json();
       if (data.success) {
-        setFileContent(data.content);
-        setOriginalContent(data.content);
+        const nextContent = typeof data.content === 'string' ? data.content : '';
+        setFileContent(nextContent);
+        setOriginalContent(nextContent);
         setActiveRange(data.range || null);
         setSnippetStartLine(data.snippetStartLine || 1); // 👈 Save the offset
+      } else {
+        throw new Error(data.error || 'Failed to read file content');
       }
     } catch (err) {
       console.error('Failed to read file:', err);
+      setFileContent('');
+      setOriginalContent('');
+      setActiveRange(null);
+      setSnippetStartLine(1);
     } finally {
       setLoading(false);
     }

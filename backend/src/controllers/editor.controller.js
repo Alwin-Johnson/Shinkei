@@ -4,7 +4,8 @@ const editorService = require('../services/editorService');
 exports.getCodeFile = async (req, res) => {
     try {
         const filePath = req.query.file;
-        const line = parseInt(req.query.line);
+        const requestedLine = Number.parseInt(req.query.line, 10);
+        const line = Number.isFinite(requestedLine) && requestedLine > 0 ? requestedLine : null;
 
         if (!filePath) {
             return res.status(400).json({ success: false, error: "Missing file path" });
@@ -12,7 +13,7 @@ exports.getCodeFile = async (req, res) => {
 
         console.log(`📖 [Editor] Reading file: ${filePath.split('/').pop()}`);
 
-        if (line) {
+                if (line !== null) {
           const { snippet, range, snippetStartLine } = await editorService.extractDesignSnippet(filePath, line);
           return res.json({ success: true, content: snippet, range, snippetStartLine });
         } else {

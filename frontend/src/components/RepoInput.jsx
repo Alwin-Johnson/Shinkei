@@ -152,19 +152,25 @@ export default function RepoInput({ onAnalyze, loading, analyzed }) {
       setError('');
       return;
     }
-    if (!isRealtime && !fnText.trim()) { setError('Specify a function or action to trace'); return; }
+
+    const isStatic = mode === 'static';
+    if (isStatic && !fnText.trim()) {
+      setError('Specify a function or action to trace');
+      return;
+    }
+
     setError('');
 
-    const finalDirection = mode === 'static' ? direction : 'forward';
-    const stepsNum = mode === 'static' ? Math.max(1, Math.min(100, Number(steps) || 10)) : 10;
+    const finalDirection = isStatic ? direction : 'forward';
+    const stepsNum = isStatic ? Math.max(1, Math.min(100, Number(steps) || 10)) : 10;
 
-    const options = mode !== 'static' ? {
+    const options = !isStatic ? {
       frontendPort: 3000,
       backendPort: 8000,
       uiEditor: mode === 'editor'
     } : null;
 
-    onAnalyze(url, isRealtime ? null : fnText, finalDirection, stepsNum, options);
+    onAnalyze(url, isStatic ? fnText : null, finalDirection, stepsNum, options);
   };
 
   return (

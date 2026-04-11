@@ -39,6 +39,15 @@ exports.extractDesignSnippet = async (filePath, targetLine) => {
     }
   });
 
+  if (!snippet) {
+    return {
+      snippet: code,
+      range: null,
+      snippetStartLine: 1,
+      fullContent: code,
+    };
+  }
+
   return { snippet, range, snippetStartLine, fullContent: code };
 };
 

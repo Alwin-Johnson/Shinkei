@@ -14,7 +14,6 @@ app.use((req, res, next) => {
     console.log(`📡 [API] ${req.method} ${req.url}`);
     next();
 });
-app.use("/api/editor", editorRoutes);
 
 // Increase limit for trace payloads (OTel batches can be large)
 app.use(express.json({ limit: '5mb' })); 
@@ -26,6 +25,7 @@ app.use("/api", codeExplainRoutes);
 
 // 👉 Shinkei Telemetry Ingest
 app.use("/api/shinkei", telemetryRoutes);
+app.use("/api/editor", editorRoutes);
 
 
 module.exports = app;

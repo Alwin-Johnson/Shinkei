@@ -3,6 +3,8 @@
 const fs = require("fs-extra");
 const path = require("path");
 const net = require("net");
+const http = require("http");
+const https = require("https");
 const { execSync, exec } = require("child_process");
 
 const { index } = require("../services/indexBuilder"); 
@@ -11,6 +13,84 @@ const { TRACING_CODE, REQUIRE_HOOK_CODE } = require("./tracingTemplates");
 const { BABEL_PLUGIN_CODE, CLIENT_SCRIPT_CODE } = require("./domTemplates");
 
 let activeProcesses = [];
+
+function openUrlInBrowser(url) {
+    let command;
+
+    if (process.platform === 'win32') {
+        command = `start "" "${url}"`;
+    } else if (process.platform === 'darwin') {
+        command = `open "${url}"`;
+    } else {
+        command = `xdg-open "${url}"`;
+    }
+
+    exec(command, (err) => {
+        if (err) {
+            console.warn(`⚠️ [Shinkei] Could not auto-open browser (${err.message}).`);
+        }
+    });
+}
+
+function isFrontendReadyOutput(output) {
+    const line = String(output || '').toLowerCase();
+    return (
+        line.includes('localhost:') ||
+        line.includes('local:') ||
+        line.includes('compiled successfully') ||
+        line.includes('ready in') ||
+        line.includes('webpack compiled')
+    );
+}
+
+function checkUrlReachable(url) {
+    return new Promise((resolve) => {
+        try {
+            const parsed = new URL(url);
+            const client = parsed.protocol === 'https:' ? https : http;
+            const req = client.request(
+                {
+                    method: 'GET',
+                    hostname: parsed.hostname,
+                    port: parsed.port,
+                    path: parsed.pathname || '/',
+                    timeout: 1500,
+                },
+                (res) => {
+                    // Any HTTP response means the server is up and accepting connections.
+                    res.resume();
+                    resolve(true);
+                }
+            );
+
+            req.on('error', () => resolve(false));
+            req.on('timeout', () => {
+                req.destroy();
+                resolve(false);
+            });
+            req.end();
+        } catch (e) {
+            resolve(false);
+        }
+    });
+}
+
+async function waitForUrlReachable(url, timeoutMs = 45000, intervalMs = 750) {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+        // eslint-disable-next-line no-await-in-loop
+        const reachable = await checkUrlReachable(url);
+        if (reachable) {
+            return true;
+        }
+
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    return false;
+}
 
 function findFreePort(startPort) {
     return new Promise((resolve) => {
@@ -200,14 +280,49 @@ module.exports = override(
         }
     });
 
-    child.stdout.on('data', (data) => console.log(`[Target Frontend]: ${data.trim()}`));
-    child.stderr.on('data', (data) => console.error(`[Target Frontend Error]: ${data.trim()}`));
+    const appUrl = `http://localhost:${FE_PORT}`;
+    const shouldOpenBrowser = options.uiEditor !== true;
+    let hasOpenedApp = false;
+    let isWaitingForReachability = false;
 
-    const openCommand = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-    setTimeout(() => {
-        console.log(`🌐 Opening target app at http://localhost:${FE_PORT}...`);
-        sseService.broadcast({ type: 'app_opened', url: `http://localhost:${FE_PORT}` });
-    }, 3000);
+    const markReadyAndOpen = async () => {
+        if (hasOpenedApp || isWaitingForReachability) return;
+        isWaitingForReachability = true;
+
+        const isReachable = await waitForUrlReachable(appUrl);
+        isWaitingForReachability = false;
+        if (!isReachable || hasOpenedApp) {
+            if (!isReachable) {
+                console.warn(`⚠️ [Shinkei] Frontend signaled ready but ${appUrl} is still unreachable.`);
+            }
+            return;
+        }
+
+        hasOpenedApp = true;
+        if (shouldOpenBrowser) {
+            console.log(`🌐 Target app ready. Opening ${appUrl}...`);
+            openUrlInBrowser(appUrl);
+        } else {
+            console.log(`🌐 Target app ready for UI editor iframe at ${appUrl}.`);
+        }
+        sseService.broadcast({ type: 'app_opened', url: appUrl });
+    };
+
+    child.stdout.on('data', (data) => {
+        const text = String(data);
+        console.log(`[Target Frontend]: ${text.trim()}`);
+        if (isFrontendReadyOutput(text)) {
+            markReadyAndOpen();
+        }
+    });
+
+    child.stderr.on('data', (data) => {
+        const text = String(data);
+        console.error(`[Target Frontend Error]: ${text.trim()}`);
+        if (isFrontendReadyOutput(text)) {
+            markReadyAndOpen();
+        }
+    });
 
     return child;
 }
@@ -217,10 +332,34 @@ async function runDynamicEnvironment(repoRoot, options = {}) {
         await stopActiveProcesses(); 
         console.log("🛠️  Preparing Dynamic Tracing Infrastructure...");
 
+        // Ensure index data exists for the target repo before building runtime trace metadata.
+        if (index.repoPath !== repoRoot || index.functionsById.size === 0) {
+            await index.build(repoRoot);
+        }
+
         const BE_PORT = await findFreePort(options.backendPort || 8000);
         const FE_PORT = await findFreePort(options.frontendPort || 3000);
 
         console.log(`📡 Allocated Ports: Backend=${BE_PORT}, Frontend=${FE_PORT}`);
+
+        // Build runtime lookup map used by requireHook.js for attaching shinkei.static.* attributes.
+        const astMap = {};
+        for (const fnInfo of index.functionsById.values()) {
+            if (!fnInfo?.file || !fnInfo?.name || !fnInfo?.startLine) {
+                continue;
+            }
+
+            const key = `${fnInfo.file}:${fnInfo.name}`;
+            if (!astMap[key]) {
+                astMap[key] = {
+                    file: fnInfo.file,
+                    line: fnInfo.startLine,
+                };
+            }
+        }
+
+        await fs.writeJson(path.join(repoRoot, "ast_map.json"), astMap, { spaces: 2 });
+        console.log(`🧭 [Shinkei] Generated ast_map.json with ${Object.keys(astMap).length} function entries.`);
 
         // --- 1. INJECT OTEL TRACING ---
         await fs.writeFile(path.join(repoRoot, "tracing.js"), TRACING_CODE);
@@ -272,7 +411,11 @@ async function runDynamicEnvironment(repoRoot, options = {}) {
         backendProcess.stdout.on('data', (data) => console.log(`[Target Backend]: ${data.trim()}`));
 
         // --- 5. LAUNCH FRONTEND ---
-        const frontendProcess = await launchFrontend(repoRoot, { frontendPort: FE_PORT, backendPort: BE_PORT });
+        const frontendProcess = await launchFrontend(repoRoot, {
+            frontendPort: FE_PORT,
+            backendPort: BE_PORT,
+            uiEditor: options.uiEditor === true,
+        });
         if (frontendProcess) activeProcesses.push(frontendProcess); 
 
     } catch (err) {

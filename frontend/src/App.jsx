@@ -170,11 +170,11 @@ function App() {
         setLoading(false);
         setView('graph');
         return { success: true };
-        setView('graph');
       } else {
-        // Real-time mode: we stay in loading state until the graph is pushed via SSE
-        console.log('📡 Waiting for real-time interaction...');
+        // Real-time/editor mode: wait for the environment to report readiness.
+        console.log(`📡 Waiting for ${isEditor ? 'UI editor' : 'real-time'} interaction...`);
         setLoading(false); // Main request is done, now we just wait for SSE
+        setView(isEditor ? 'editor' : 'graph');
       }
     }
 
@@ -190,10 +190,6 @@ function App() {
     setIsRealtimeSession(false);
     setIsEditorSession(false);
     setIsAutoOpening(false);
-  } finally {
-    if (analysisId === currentAnalysisId) {
-      setView('graph');
-    }
   }
 };
 
